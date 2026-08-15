@@ -302,33 +302,42 @@ function parseMathClose(line: string, kind: MathOpen['kind']): MathClose | null 
   return null;
 }
 
-function looksLikeDisplayMath(lines: string[]): boolean {
+export function looksLikeDisplayMath(lines: string[]): boolean {
   const body = lines.join('\n').trim();
-  if (!body) return false;
+  if (!body || body.length > 4000) return false;
 
-  let score = 0;
-  if (/\\[A-Za-z]+/.test(body)) score += 2;
-  if (/\\_/.test(body) || /[_^]/.test(body)) score += 1;
-  if (/[=<>]/.test(body)) score += 1;
-  if (/\\(?:frac|sum|int|boxed|operatorname|begin|end|log|sqrt)\b/.test(body)) score += 2;
-  if (/^[\s\S]{0,120}$/.test(body) && /[A-Za-z][A-Za-z0-9_{}'\\]*\([^\n]*\)/.test(body)) score += 1;
-  if (/^[A-Za-z][A-Za-z0-9_{}'\\]*(?:\([^)]*\))?\s*[=<>]\s*\S[\s\S]*$/.test(body)) score += 1;
+  if (/https?:\/\/|www\./i.test(body)) return false;
+  if (/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s+|#{1,6}\s+)/m.test(body)) return false;
+  if (/^\s*(?:```|~~~)/m.test(body)) return false;
+  if (/(?:^|[\s,])["'`][^"'`\n]*[A-Za-z\u3400-\u9FFF][^"'`\n]*["'`](?:[\s,]|$)/.test(body)) return false;
 
-  // ChatGPT clipboard corruption can leave display-math delimiters as bare
-  // lines containing only '[' and ']'. Compact expressions such as
-  // e^{100}, e^{1000}, e^{1001} or U-m=[-2,-1,0] carry only one of the
-  // older heuristic signals, so give them one additional point without
-  // accepting ordinary prose wrapped in standalone brackets.
-  const compact = body.replace(/\s+/g, '');
-  const proseWordCount = body.match(/[A-Za-z]{4,}/g)?.length ?? 0;
-  const compactMathExpression =
-    compact.length <= 240 &&
-    proseWordCount <= 1 &&
-    /^[A-Za-z0-9\\_{}[\](),.+\-*/=<>|^'!:%]+$/.test(compact) &&
-    /[_^=<>+\-*/[\]{}]/.test(compact);
-  if (compactMathExpression) score += 1;
+  const explicitMath =
+    /\\[A-Za-z]+/.test(body) ||
+    /(?:\^|_)(?:\{[^{}\n]+\}|[A-Za-z0-9])/.test(body) ||
+    /[\u0370-\u03FF]/.test(body);
+  if (explicitMath) return true;
 
-  return score >= 2;
+  const words = body.match(/[A-Za-z]{2,}/g) ?? [];
+  const proseWords = words.filter(
+    (word) => !/^(?:sin|cos|tan|cot|sec|csc|log|ln|exp|lim|max|min|det|rank|mod|gcd|lcm|softmax|relu|in)$/i.test(word),
+  );
+  if (proseWords.length >= 3) return false;
+  if (proseWords.length >= 2 && /\s+/.test(body)) return false;
+
+  const hasCjk = /[\u3400-\u9FFF]/.test(body);
+  const hasMathRelation = /[=<>≤≥≈≠∈∉∝→←↔±×÷∑∏√∞∂∇]/.test(body);
+  if (hasCjk && !hasMathRelation) return false;
+
+  if (hasMathRelation) return true;
+  if (/[A-Za-z0-9)\]}]\s*[+\-*/]\s*(?:[A-Za-z0-9({]|\[)/.test(body)) return true;
+  if (/^[A-Za-z][A-Za-z0-9_{}'\\]*\s*\([^()\n]*\)[.,]?$/.test(body)) return true;
+  if (/^[+-]?\d+(?:\.\d+)?[.,]?$/.test(body)) return true;
+  if (/^[A-Za-z][A-Za-z0-9_{}'\\]*[.,]?$/.test(body)) return true;
+  if (/^[([{][\s\S]*[)\]}][.,]?$/.test(body) && /[A-Za-z0-9]/.test(body)) return true;
+
+  const withoutSquareBrackets = body.replaceAll('[', '').replaceAll(']', '');
+  const mathAlphabetOnly = /^[A-Za-z0-9\s\\_{}(),.;:+\-*/=<>|^'!%&]+$/.test(withoutSquareBrackets);
+  return mathAlphabetOnly && body.length <= 1200;
 }
 
 function cleanDisplayBody(

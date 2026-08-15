@@ -175,6 +175,38 @@ p\\_i
     assert.equal(detectChatGPTMathCopy('普通的一段中文笔记。'), 0);
   }
 
+
+  {
+    const mathBodies = [
+      '42', 'x', 'x+y', '1,2,3', '[-2,-1,0]', 'P(A|B)',
+      'sin theta', 'x in R', '\\sqrt{2}', '\\alpha+\\beta',
+      '\\begin{bmatrix}\n1 & 2 \\\\ 3 & 4\n\\end{bmatrix}',
+    ];
+    for (const body of mathBodies) {
+      const input = `[\n${body}\n]`;
+      assert.equal(
+        convertChatGPTToObsidian(input).output,
+        `$$\n${body}\n$$`,
+        `Expected display-math recovery for: ${body}`,
+      );
+    }
+  }
+
+  {
+    const nonMathBodies = [
+      'hello world', '这是普通文本。', '- list item',
+      'https://example.com', '"hello"',
+    ];
+    for (const body of nonMathBodies) {
+      const input = `[\n${body}\n]`;
+      assert.equal(
+        convertChatGPTToObsidian(input).output,
+        input,
+        `Expected non-math bracket block to stay unchanged: ${body}`,
+      );
+    }
+  }
+
   console.log('All converter tests passed.');
 } finally {
   await rm(dir, { recursive: true, force: true });
