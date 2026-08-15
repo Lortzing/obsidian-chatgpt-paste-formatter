@@ -1,0 +1,260 @@
+name: Finalize 0.1.5 v2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Patch permissive math detection and version
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          converter_path = Path('src/converter.ts')
+          converter = converter_path.read_text()
+          start = converter.index('function looksLikeDisplayMath(lines: string[]): boolean {')
+          end = converter.index('\nfunction cleanDisplayBody(', start)
+          replacement = r'''export function looksLikeDisplayMath(lines: string[]): boolean {
+            const body = lines.join('\n').trim();
+            if (!body || body.length > 4000) return false;
+
+            if (/https?:\/\/|www\./i.test(body)) return false;
+            if (/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s+|#{1,6}\s+)/m.test(body)) return false;
+            if (/^\s*(?:```|~~~)/m.test(body)) return false;
+            if (/(?:^|[\s,])["'`][^"'`\n]*[A-Za-z\u3400-\u9FFF][^"'`\n]*["'`](?:[\s,]|$)/.test(body)) return false;
+
+            const explicitMath =
+              /\\[A-Za-z]+/.test(body) ||
+              /(?:\^|_)(?:\{[^{}\n]+\}|[A-Za-z0-9])/.test(body) ||
+              /[\u0370-\u03FF]/.test(body);
+            if (explicitMath) return true;
+
+            const words = body.match(/[A-Za-z]{2,}/g) ?? [];
+            const proseWords = words.filter(
+              (word) => !/^(?:sin|cos|tan|cot|sec|csc|log|ln|exp|lim|max|min|det|rank|mod|gcd|lcm|softmax|relu|in)$/i.test(word),
+            );
+            if (proseWords.length >= 3) return false;
+            if (proseWords.length >= 2 && /\s+/.test(body)) return false;
+
+            const hasCjk = /[\u3400-\u9FFF]/.test(body);
+            const hasMathRelation = /[=<>≤≥≈≠∈∉∝→←↔±×÷∑∏√∞∂∇]/.test(body);
+            if (hasCjk && !hasMathRelation) return false;
+
+            if (hasMathRelation) return true;
+            if (/[A-Za-z0-9)\]}]\s*[+\-*/]\s*(?:[A-Za-z0-9({]|\[)/.test(body)) return true;
+            if (/^[A-Za-z][A-Za-z0-9_{}'\\]*\s*\([^()\n]*\)[.,]?$/.test(body)) return true;
+            if (/^[+-]?\d+(?:\.\d+)?[.,]?$/.test(body)) return true;
+            if (/^[A-Za-z][A-Za-z0-9_{}'\\]*[.,]?$/.test(body)) return true;
+            if (/^[([{][\s\S]*[)\]}][.,]?$/.test(body) && /[A-Za-z0-9]/.test(body)) return true;
+
+            const withoutSquareBrackets = body.replaceAll('[', '').replaceAll(']', '');
+            const mathAlphabetOnly = /^[A-Za-z0-9\s\\_{}(),.;:+\-*/=<>|^'!%&]+$/.test(withoutSquareBrackets);
+            return mathAlphabetOnly && body.length <= 1200;
+          }
+          '''
+          converter_path.write_text(converter[:start] + replacement + converter[end:])
+
+          formatter_path = Path('src/formatter.ts')
+          formatter_path.write_text(r'''import {
+            convertChatGPTToObsidian as convertCore,
+            DEFAULT_SETTINGS,
+            detectChatGPTMathCopy,
+            looksLikeDisplayMath,
+            type ConversionResult,
+            type FormatterSettings,
+          } from './converter';
+
+          export { DEFAULT_SETTINGS, detectChatGPTMathCopy };
+          export type { FormatterSettings };
+
+          export function convertChatGPTToObsidian(
+            input: string,
+            settings: FormatterSettings = DEFAULT_SETTINGS,
+          ): ConversionResult {
+            const normalizedInput = input.replace(/\r\n?/g, '\n').replace(/\u200B/g, '');
+            const recoveredInput = recoverBareDisplayMath(normalizedInput);
+            const result = convertCore(recoveredInput, settings);
+            return { ...result, changed: result.output !== normalizedInput };
+          }
+
+          export function recoverBareDisplayMath(text: string): string {
+            const lines = text.split('\n');
+            const out: string[] = [];
+            let inFence = false;
+            let fenceChar = '';
+            let fenceLength = 0;
+
+            for (let i = 0; i < lines.length; i += 1) {
+              const line = lines[i];
+              const fence = line.match(/^\s*(`{3,}|~{3,})/);
+              if (inFence) {
+                out.push(line);
+                if (fence && fence[1][0] === fenceChar && fence[1].length >= fenceLength) {
+                  inFence = false;
+                  fenceChar = '';
+                  fenceLength = 0;
+                }
+                continue;
+              }
+              if (fence) {
+                inFence = true;
+                fenceChar = fence[1][0];
+                fenceLength = fence[1].length;
+                out.push(line);
+                continue;
+              }
+
+              const open = line.match(/^(\s*)\[\s*$/);
+              if (!open) {
+                out.push(line);
+                continue;
+              }
+
+              let closeIndex = -1;
+              let punctuation = '';
+              for (let j = i + 1; j < lines.length; j += 1) {
+                if (/^\s*(`{3,}|~{3,})/.test(lines[j])) break;
+                const close = lines[j].match(/^\s*\]\s*([.,;:!?，。；：！？]?)\s*$/);
+                if (close) {
+                  closeIndex = j;
+                  punctuation = close[1] ?? '';
+                  break;
+                }
+              }
+
+              if (closeIndex < 0) {
+                out.push(line);
+                continue;
+              }
+
+              const body = lines.slice(i + 1, closeIndex);
+              if (!looksLikeDisplayMath(body)) {
+                out.push(line);
+                continue;
+              }
+
+              const indent = open[1];
+              out.push(`${indent}\\[`);
+              out.push(...body);
+              out.push(`${indent}\\]${punctuation}`);
+              i = closeIndex;
+            }
+            return out.join('\n');
+          }
+          ''')
+
+          tests_path = Path('scripts/test-converter.mjs')
+          tests = tests_path.read_text()
+          marker = "  console.log('All converter tests passed.');"
+          extra = r'''
+            {
+              const mathBodies = [
+                '42', 'x', 'x+y', '1,2,3', '[-2,-1,0]', 'P(A|B)',
+                'sin theta', 'x in R', '\\sqrt{2}', '\\alpha+\\beta',
+                '\\begin{bmatrix}\n1 & 2 \\\\ 3 & 4\n\\end{bmatrix}',
+              ];
+              for (const body of mathBodies) {
+                const input = `[\n${body}\n]`;
+                assert.equal(
+                  convertChatGPTToObsidian(input).output,
+                  `$$\n${body}\n$$`,
+                  `Expected display-math recovery for: ${body}`,
+                );
+              }
+            }
+
+            {
+              const nonMathBodies = [
+                'hello world', '这是普通文本。', '- list item',
+                'https://example.com', '"hello"',
+              ];
+              for (const body of nonMathBodies) {
+                const input = `[\n${body}\n]`;
+                assert.equal(
+                  convertChatGPTToObsidian(input).output,
+                  input,
+                  `Expected non-math bracket block to stay unchanged: ${body}`,
+                );
+              }
+            }
+
+          ''' + marker
+          if marker not in tests:
+            raise SystemExit('test insertion marker not found')
+          tests_path.write_text(tests.replace(marker, extra, 1))
+
+          for filename in ('package.json', 'manifest.json'):
+            path = Path(filename)
+            data = json.loads(path.read_text())
+            data['version'] = '0.1.5'
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+
+          versions_path = Path('versions.json')
+          versions = json.loads(versions_path.read_text())
+          versions['0.1.5'] = '1.7.2'
+          versions_path.write_text(json.dumps(versions, indent=2, ensure_ascii=False) + '\n')
+          PY
+
+      - name: Synchronize lockfile
+        run: npm install --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify implementation
+        run: npm run check
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-0.1.5-v2.yml
+          git add src/converter.ts src/formatter.ts scripts/test-converter.mjs package.json package-lock.json manifest.json versions.json
+          git commit -m "feat: broaden math recovery and add converter sidebar"
+          git push origin HEAD:main
+
+      - name: Tag 0.1.5
+        run: |
+          git tag 0.1.5
+          git push origin 0.1.5
+
+      - name: Create release package
+        run: |
+          mkdir -p release
+          cp main.js manifest.json styles.css release/
+          cd release
+          zip ../chatgpt-paste-formatter-0.1.5.zip main.js manifest.json styles.css
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: 0.1.5
+          name: 0.1.5
+          body: |
+            - Broaden standalone ChatGPT display-math recovery with permissive structure-based detection and prose/Markdown safeguards.
+            - Add a right-side manual conversion view with vertically stacked source and result panes.
+            - Automatically sync mouse/keyboard editor selections into the source pane, with apply/copy/clear actions at the bottom.
+          files: |
+            main.js
+            manifest.json
+            styles.css
+            chatgpt-paste-formatter-0.1.5.zip
