@@ -476,7 +476,7 @@ function shouldConvertParens(
     /\\_/.test(inner) ||
     /[_^]/.test(inner) ||
     /[=<>]/.test(inner) ||
-    /(?:^|\s)[A-Za-z0-9)}\]]\s*[+\-*/]\s*[A-Za-z0-9({\[]/.test(inner);
+    /(?:^|\s)[A-Za-z0-9)}\]]\s*[+\-*/]\s*[A-Za-z0-9({[]/.test(inner);
   if (hardMath) return true;
 
   const nestedFunction = /^[A-Za-z][A-Za-z0-9_{}'\\]*\([^()]*\)$/.test(inner);
