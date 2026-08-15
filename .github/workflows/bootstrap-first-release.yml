@@ -1,0 +1,94 @@
+name: Bootstrap first release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.repository == 'Lortzing/obsidian-chatgpt-paste-formatter'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install dependencies and generate lockfile
+        run: npm install
+
+      - name: Run full plugin checks
+        run: npm run check
+
+      - name: Materialize README assets
+        shell: bash
+        run: |
+          if [[ -f assets/preview.png.b64 ]]; then
+            base64 --decode assets/preview.png.b64 > assets/preview.png
+          fi
+          if [[ -f assets/demo.gif.b64 ]]; then
+            base64 --decode assets/demo.gif.b64 > assets/demo.gif
+          fi
+          rm -f assets/preview.png.b64 assets/demo.gif.b64 assets/.gitkeep
+
+      - name: Commit generated lockfile and binary assets
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A package-lock.json assets/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: add lockfile and README assets"
+            git push origin HEAD:main
+          fi
+
+      - name: Build install ZIP
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          zip "chatgpt-paste-formatter-${VERSION}.zip" main.js manifest.json styles.css
+
+      - name: Create initial GitHub release if missing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists; nothing to do."
+            exit 0
+          fi
+          gh release create "$VERSION" \
+            main.js \
+            manifest.json \
+            styles.css \
+            "chatgpt-paste-formatter-${VERSION}.zip" \
+            --target "$(git rev-parse HEAD)" \
+            --title "$VERSION" \
+            --notes "Initial beta release for BRAT testing. Converts damaged ChatGPT Markdown and math clipboard output into Obsidian-friendly Markdown and MathJax."
+
+      - name: Best-effort repository About metadata
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}" \
+            -f description='Convert ChatGPT Markdown and LaTeX into clean, Obsidian-ready notes on paste.'
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/topics" \
+            -f 'names[]=obsidian' \
+            -f 'names[]=obsidian-plugin' \
+            -f 'names[]=chatgpt' \
+            -f 'names[]=markdown' \
+            -f 'names[]=latex' \
+            -f 'names[]=mathjax' \
+            -f 'names[]=clipboard' \
+            -f 'names[]=typescript'
