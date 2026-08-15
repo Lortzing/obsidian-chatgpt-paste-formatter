@@ -307,7 +307,7 @@ export function looksLikeDisplayMath(lines: string[]): boolean {
   if (!body || body.length > 4000) return false;
 
   if (/https?:\/\/|www\./i.test(body)) return false;
-  if (/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s+)/m.test(body)) return false;
+  if (/^\s*(?:[-*+][ \t]+\S|\d+[.)][ \t]+\S|>[ \t]+\S)/m.test(body)) return false;
 
   const headingPayloads = body
     .split('\n')
@@ -419,6 +419,11 @@ function isLikelyRightHandSide(line: string): boolean {
 function normalizeMath(text: string, settings: FormatterSettings, stats: ConversionStats): string {
   let out = text;
 
+  if (/^\\?-{3,}$/.test(out.trim())) {
+    out = '-';
+    stats.cleanedArtifacts += 1;
+  }
+
   if (settings.repairRepeatedEquals) {
     out = out.replace(/\\?={2,}/g, () => {
       stats.repairedRepeatedEquals += 1;
@@ -446,12 +451,24 @@ function mergeAdjacentDisplayMathBlocks(text: string, stats: ConversionStats): s
       if (!looksLikeMathContinuation(secondBody) && !endsWithMathContinuation(firstBody)) return match;
       merged = true;
       stats.mergedDisplayMath += 1;
-      return `$$\n${firstBody.trimEnd()}\n${secondBody.trimStart()}\n$$`;
+      return `$$\n${mergeDisplayBodiesWithLineBreak(firstBody, secondBody)}\n$$`;
     });
     if (!merged) break;
   }
 
   return out;
+}
+
+function mergeDisplayBodiesWithLineBreak(firstBody: string, secondBody: string): string {
+  const first = firstBody.trim();
+  const second = secondBody.trim();
+  const gathered = first.match(/^\\begin\{gathered\}\n([\s\S]*?)\n\\end\{gathered\}$/);
+
+  if (gathered) {
+    return `\\begin{gathered}\n${gathered[1].trimEnd()}\n\\\\\n${second}\n\\end{gathered}`;
+  }
+
+  return `\\begin{gathered}\n${first}\n\\\\\n${second}\n\\end{gathered}`;
 }
 
 function looksLikeMathContinuation(body: string): boolean {
