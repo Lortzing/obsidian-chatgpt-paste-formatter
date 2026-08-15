@@ -5,8 +5,8 @@ import {
   detectChatGPTMathCopy,
   type FormatterSettings,
 } from './formatter';
+import { CONVERTER_VIEW_TYPE, ConverterSidebarView } from './converter-view';
 import { setLanguagePreference, t } from './i18n';
-import { ConversionPreviewModal } from './preview-modal';
 import { FormatterSettingTab } from './settings';
 
 const LOCALIZED_COMMAND_IDS = [
@@ -20,6 +20,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.registerView(CONVERTER_VIEW_TYPE, (leaf) => new ConverterSidebarView(leaf, this));
     this.addSettingTab(new FormatterSettingTab(this.app, this));
     this.registerLocalizedCommands();
 
@@ -50,15 +51,24 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
         menu.addItem((item) =>
           item
             .setTitle(t('menu.convert'))
-            .onClick(() => this.convertSelectionOrNote(editor, false)),
+            .onClick(() => this.convertSelectionOrNote(editor)),
         );
         menu.addItem((item) =>
           item
             .setTitle(t('menu.preview'))
-            .onClick(() => this.convertSelectionOrNote(editor, true)),
+            .onClick(() => {
+              void this.openConverterSidebar(editor, false);
+            }),
         );
       }),
     );
+
+    this.registerDomEvent(document, 'mouseup', () => this.syncSidebarSelection());
+    this.registerDomEvent(document, 'keyup', () => this.syncSidebarSelection());
+  }
+
+  onunload(): void {
+    this.app.workspace.detachLeavesOfType(CONVERTER_VIEW_TYPE);
   }
 
   async loadSettings(): Promise<void> {
@@ -79,6 +89,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
       this.removeCommand(commandId);
     }
     this.registerLocalizedCommands();
+    this.getConverterView()?.refreshLanguage();
   }
 
   private registerLocalizedCommands(): void {
@@ -100,31 +111,52 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     this.addCommand({
       id: 'convert-selection-or-note',
       name: t('command.convert'),
-      editorCallback: (editor) => this.convertSelectionOrNote(editor, false),
+      editorCallback: (editor) => this.convertSelectionOrNote(editor),
     });
 
     this.addCommand({
       id: 'preview-selection-or-note',
       name: t('command.preview'),
-      editorCallback: (editor) => this.convertSelectionOrNote(editor, true),
+      editorCallback: (editor) => {
+        void this.openConverterSidebar(editor, true);
+      },
     });
   }
 
-  private convertSelectionOrNote(editor: Editor, preview: boolean): void {
+  private convertSelectionOrNote(editor: Editor): void {
     const hasSelection = editor.somethingSelected();
     const original = hasSelection ? editor.getSelection() : editor.getValue();
     const result = convertChatGPTToObsidian(original, this.settings);
 
-    const apply = () => {
-      if (hasSelection) editor.replaceSelection(result.output);
-      else editor.setValue(result.output);
-      new Notice(result.changed ? t('notice.applied') : t('notice.unchanged'));
-    };
+    if (hasSelection) editor.replaceSelection(result.output);
+    else editor.setValue(result.output);
+    new Notice(result.changed ? t('notice.applied') : t('notice.unchanged'));
+  }
 
-    if (preview) {
-      new ConversionPreviewModal(this.app, original, result.output, apply).open();
-      return;
+  private async openConverterSidebar(editor?: Editor, wholeNoteIfNoSelection = false): Promise<void> {
+    let leaf = this.app.workspace.getLeavesOfType(CONVERTER_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false) ?? undefined;
     }
-    apply();
+    if (!leaf) return;
+
+    if (leaf.getViewState().type !== CONVERTER_VIEW_TYPE) {
+      await leaf.setViewState({ type: CONVERTER_VIEW_TYPE, active: true });
+    }
+    await this.app.workspace.revealLeaf(leaf);
+
+    const view = leaf.view;
+    if (!(view instanceof ConverterSidebarView)) return;
+    if (editor) view.captureFromEditor(editor, wholeNoteIfNoSelection);
+    else view.captureActiveSelection();
+  }
+
+  private getConverterView(): ConverterSidebarView | null {
+    const leaf = this.app.workspace.getLeavesOfType(CONVERTER_VIEW_TYPE)[0];
+    return leaf?.view instanceof ConverterSidebarView ? leaf.view : null;
+  }
+
+  private syncSidebarSelection(): void {
+    this.getConverterView()?.captureActiveSelection();
   }
 }
