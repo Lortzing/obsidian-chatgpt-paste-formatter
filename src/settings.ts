@@ -12,8 +12,10 @@ export class FormatterSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: t('settings.title') });
-    containerEl.createEl('p', { text: t('settings.languageHint') });
+    new Setting(containerEl)
+      .setName(t('settings.title'))
+      .setDesc(t('settings.languageHint'))
+      .setHeading();
 
     new Setting(containerEl)
       .setName(t('settings.autoPaste.name'))
