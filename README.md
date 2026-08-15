@@ -3,6 +3,7 @@
 > An Obsidian plugin that repairs Markdown and mathematical notation copied from ChatGPT before it lands in your notes.
 
 [![Obsidian](https://img.shields.io/badge/Obsidian-plugin-7C3AED?logo=obsidian&logoColor=white)](https://obsidian.md)
+[![GitHub release](https://img.shields.io/github/v/release/Lortzing/obsidian-chatgpt-paste-formatter?display_name=tag)](https://github.com/Lortzing/obsidian-chatgpt-paste-formatter/releases/latest)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -14,6 +15,14 @@ ChatGPT Paste Formatter detects and repairs these common clipboard artifacts loc
 
 > [!NOTE]
 > This project is currently in early development and is **not yet listed in Obsidian Community Plugins**.
+
+## Demo
+
+<p align="center">
+  <img src="assets/demo.gif" alt="ChatGPT Paste Formatter conversion demo" width="900">
+</p>
+
+The demo illustrates the transformation performed by the plugin; it is a product preview rather than a screenshot of a specific Obsidian theme.
 
 ## Example
 
@@ -131,7 +140,21 @@ This option is deliberately conservative.
 
 The plugin is not yet available in the Obsidian Community Plugins directory.
 
-### Manual installation from source
+### From GitHub Releases
+
+1. Open the latest GitHub Release.
+2. Download `main.js`, `manifest.json`, and `styles.css`.
+3. Create this directory in your vault:
+
+   ```text
+   <Vault>/.obsidian/plugins/chatgpt-paste-formatter/
+   ```
+
+4. Put the three downloaded files in that directory.
+5. Reload Obsidian.
+6. Enable **ChatGPT Paste Formatter** under **Settings → Community plugins**.
+
+### Build from source
 
 Requirements: Node.js and npm.
 
@@ -142,21 +165,7 @@ npm install
 npm run build
 ```
 
-Then create the plugin directory in your vault:
-
-```text
-<Vault>/.obsidian/plugins/chatgpt-paste-formatter/
-```
-
-and copy these files from the repository into it:
-
-```text
-main.js
-manifest.json
-styles.css
-```
-
-Reload Obsidian, then enable **ChatGPT Paste Formatter** under **Settings → Community plugins**.
+Copy `main.js`, `manifest.json`, and `styles.css` into the plugin directory shown above, reload Obsidian, and enable the plugin.
 
 ## Development
 
@@ -216,7 +225,6 @@ For important equations or large notes, use **Preview conversion** before applyi
 - Expand test coverage with more real ChatGPT clipboard samples.
 - Improve structural parsing of damaged display math.
 - Reduce false positives in inline-math detection.
-- Publish packaged GitHub releases.
 - Submit the plugin to the Obsidian Community Plugins directory once the converter is sufficiently stable.
 
 ## Contributing
