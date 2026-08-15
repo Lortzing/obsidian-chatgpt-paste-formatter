@@ -1,0 +1,103 @@
+import { moment } from 'obsidian';
+
+export type SupportedLocale = 'en' | 'zh-cn';
+
+const EN = {
+  'settings.title': 'ChatGPT Paste Formatter',
+  'settings.languageHint': 'Interface language follows the current Obsidian language automatically.',
+  'settings.autoPaste.name': 'Automatic paste conversion',
+  'settings.autoPaste.desc': 'Detected only is the safer default: normal clipboard text is left untouched.',
+  'settings.autoPaste.off': 'Off',
+  'settings.autoPaste.detected': 'Detected ChatGPT/math copies only',
+  'settings.autoPaste.always': 'Always convert pasted text',
+  'settings.inlineMath.name': 'Inline math detection',
+  'settings.inlineMath.desc': 'Balanced converts obvious LaTeX and contextual variables such as Chinese prose followed by (x).',
+  'settings.inlineMath.strict': 'Strict',
+  'settings.inlineMath.balanced': 'Balanced',
+  'settings.inlineMath.aggressive': 'Aggressive',
+  'settings.delimiters.name': 'Convert LaTeX delimiters',
+  'settings.delimiters.desc': 'Convert \\(...\\) to $...$ and \\[...\\] to $$...$$.',
+  'settings.displayMath.name': 'Repair copied display math',
+  'settings.displayMath.desc': 'Repair ChatGPT clipboard artifacts such as standalone [ ... ] blocks and “# [ formula” lines.',
+  'settings.escapes.name': 'Normalize escaped math symbols',
+  'settings.escapes.desc': 'Inside detected math only, convert copied escapes such as U\\_r and \\+ back to U_r and +.',
+  'settings.relation.name': 'Repair obvious missing relation',
+  'settings.relation.desc': 'For malformed “# [ LHS” equation blocks, insert an equals sign only when the first two lines clearly look like LHS/RHS.',
+  'settings.emphasis.name': 'Clean empty emphasis artifacts',
+  'settings.emphasis.desc': 'Optional and off by default. Removing ** ** can merge adjacent emphasis spans, so enable only if your clipboard format needs it.',
+  'settings.notices.name': 'Show conversion notices',
+  'settings.notices.desc': 'Show a short notice after manual conversions.',
+  'command.paste': 'Paste with conversion',
+  'command.convert': 'Convert selection or current note',
+  'command.preview': 'Preview conversion for selection or current note',
+  'menu.convert': 'Convert copied text',
+  'menu.preview': 'Preview conversion',
+  'notice.pasteRepaired': 'Pasted with ChatGPT formatting repaired.',
+  'notice.pasteUnchanged': 'Pasted; no conversion was needed.',
+  'notice.clipboardFailed': 'Clipboard access failed. Paste normally, select the text, then run the conversion command.',
+  'notice.applied': 'Conversion applied.',
+  'notice.unchanged': 'No conversion was needed.',
+  'preview.title': 'Preview conversion',
+  'preview.before': 'Before',
+  'preview.after': 'After',
+  'preview.cancel': 'Cancel',
+  'preview.apply': 'Apply',
+} as const;
+
+type TranslationKey = keyof typeof EN;
+
+const ZH_CN: Record<TranslationKey, string> = {
+  'settings.title': 'ChatGPT 粘贴格式化',
+  'settings.languageHint': '界面语言会自动跟随当前 Obsidian 语言。',
+  'settings.autoPaste.name': '自动粘贴转换',
+  'settings.autoPaste.desc': '推荐使用“仅检测到 ChatGPT/数学内容时转换”，普通剪贴板文本不会被修改。',
+  'settings.autoPaste.off': '关闭',
+  'settings.autoPaste.detected': '仅检测到 ChatGPT/数学内容时转换',
+  'settings.autoPaste.always': '始终转换粘贴文本',
+  'settings.inlineMath.name': '行内公式检测',
+  'settings.inlineMath.desc': '“均衡”模式会转换明显的 LaTeX，以及中文语境中的变量，例如“其中 (x) 表示……”。',
+  'settings.inlineMath.strict': '严格',
+  'settings.inlineMath.balanced': '均衡',
+  'settings.inlineMath.aggressive': '激进',
+  'settings.delimiters.name': '转换 LaTeX 定界符',
+  'settings.delimiters.desc': '将 \\(...\\) 转换为 $...$，并将 \\[...\\] 转换为 $$...$$。',
+  'settings.displayMath.name': '修复复制后的块级公式',
+  'settings.displayMath.desc': '修复 ChatGPT 剪贴板中的异常格式，例如独立的 [ ... ] 块和“# [ formula”行。',
+  'settings.escapes.name': '规范化公式中的转义符号',
+  'settings.escapes.desc': '仅在检测到的数学内容中，将 U\\_r、\\+ 等复制产生的转义恢复为 U_r、+。',
+  'settings.relation.name': '修复明显缺失的关系符',
+  'settings.relation.desc': '对于异常的“# [ LHS”公式块，仅在前两行明显构成左式/右式时自动补充等号。',
+  'settings.emphasis.name': '清理空的强调标记',
+  'settings.emphasis.desc': '默认关闭。删除 ** ** 可能会合并相邻的强调区间，仅在你的剪贴板格式确实需要时启用。',
+  'settings.notices.name': '显示转换通知',
+  'settings.notices.desc': '手动转换后显示简短通知。',
+  'command.paste': '粘贴并转换格式',
+  'command.convert': '转换所选内容或当前笔记',
+  'command.preview': '预览所选内容或当前笔记的转换结果',
+  'menu.convert': '转换复制的文本',
+  'menu.preview': '预览转换结果',
+  'notice.pasteRepaired': '已粘贴，并修复 ChatGPT 格式。',
+  'notice.pasteUnchanged': '已粘贴，无需转换。',
+  'notice.clipboardFailed': '无法读取剪贴板。请正常粘贴并选中文本，然后运行转换命令。',
+  'notice.applied': '已应用转换。',
+  'notice.unchanged': '无需转换。',
+  'preview.title': '预览转换结果',
+  'preview.before': '转换前',
+  'preview.after': '转换后',
+  'preview.cancel': '取消',
+  'preview.apply': '应用',
+};
+
+const DICTIONARIES: Record<SupportedLocale, Record<TranslationKey, string>> = {
+  en: EN,
+  'zh-cn': ZH_CN,
+};
+
+export function getSupportedLocale(): SupportedLocale {
+  const detected = (moment.locale() || document.documentElement.lang || navigator.language || 'en').toLowerCase();
+  return detected.startsWith('zh') ? 'zh-cn' : 'en';
+}
+
+export function t(key: TranslationKey): string {
+  return DICTIONARIES[getSupportedLocale()][key];
+}
