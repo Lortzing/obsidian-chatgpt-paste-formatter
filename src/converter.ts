@@ -314,6 +314,20 @@ function looksLikeDisplayMath(lines: string[]): boolean {
   if (/^[\s\S]{0,120}$/.test(body) && /[A-Za-z][A-Za-z0-9_{}'\\]*\([^\n]*\)/.test(body)) score += 1;
   if (/^[A-Za-z][A-Za-z0-9_{}'\\]*(?:\([^)]*\))?\s*[=<>]\s*\S[\s\S]*$/.test(body)) score += 1;
 
+  // ChatGPT clipboard corruption can leave display-math delimiters as bare
+  // lines containing only '[' and ']'. Compact expressions such as
+  // e^{100}, e^{1000}, e^{1001} or U-m=[-2,-1,0] carry only one of the
+  // older heuristic signals, so give them one additional point without
+  // accepting ordinary prose wrapped in standalone brackets.
+  const compact = body.replace(/\s+/g, '');
+  const proseWordCount = body.match(/[A-Za-z]{4,}/g)?.length ?? 0;
+  const compactMathExpression =
+    compact.length <= 240 &&
+    proseWordCount <= 1 &&
+    /^[A-Za-z0-9\\_{}[\](),.+\-*/=<>|^'!:%]+$/.test(compact) &&
+    /[_^=<>+\-*/[\]{}]/.test(compact);
+  if (compactMathExpression) score += 1;
+
   return score >= 2;
 }
 
