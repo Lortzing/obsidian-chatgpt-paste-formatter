@@ -55,6 +55,16 @@ export class FormatterSettingTab extends PluginSettingTab {
           }),
       );
 
+    new Setting(containerEl)
+      .setName(t('settings.sidebarSelection.name'))
+      .setDesc(t('settings.sidebarSelection.desc'))
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.showSelectionInSidebar).onChange(async (value) => {
+          this.plugin.settings.showSelectionInSidebar = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
     this.addSection('settings.section.detection');
 
     new Setting(containerEl)
