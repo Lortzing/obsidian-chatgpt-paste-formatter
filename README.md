@@ -1,8 +1,23 @@
 # ChatGPT Paste Formatter
 
-Convert text copied from ChatGPT into Obsidian-friendly Markdown and MathJax without sending note content anywhere.
+> An Obsidian plugin that repairs Markdown and mathematical notation copied from ChatGPT before it lands in your notes.
 
-The plugin is designed for the common failure mode where copied ChatGPT math arrives as damaged plain Markdown, for example:
+[![Obsidian](https://img.shields.io/badge/Obsidian-plugin-7C3AED?logo=obsidian&logoColor=white)](https://obsidian.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**Copy from ChatGPT → paste into Obsidian → keep formulas and Markdown readable.**
+
+ChatGPT sometimes places a visually correct formula on the clipboard in a form that does not survive a normal paste into Obsidian. Display equations may become stray `[ ... ]` blocks, headings can appear in front of formulas, and math escapes such as `U\_r` may remain in the note.
+
+ChatGPT Paste Formatter detects and repairs these common clipboard artifacts locally, while leaving code blocks and inline code alone.
+
+> [!NOTE]
+> This project is currently in early development and is **not yet listed in Obsidian Community Plugins**.
+
+## Example
+
+### Copied from ChatGPT
 
 ```text
 ### 1. (U\_r(x)) 是什么？
@@ -13,7 +28,7 @@ The plugin is designed for the common failure mode where copied ChatGPT math arr
 ]
 ```
 
-and should become:
+### After conversion
 
 ```markdown
 ### 1. $U_r(x)$ 是什么？
@@ -26,53 +41,69 @@ $$
 
 ## Features
 
-- **Paste with conversion** from the command palette.
-- **Convert selection or current note** without touching code fences or inline code.
-- **Preview before applying** for long or formula-heavy notes.
-- Optional **automatic paste conversion**:
+- **Paste with conversion** directly from the command palette.
+- **Convert the current selection or note** after content has already been pasted.
+- **Preview changes before applying them** to formula-heavy notes.
+- Optional automatic paste conversion with three modes:
   - Off
-  - Detected ChatGPT/math copies only (default)
+  - Detected ChatGPT/math copies only *(default)*
   - Always
-- Converts `\(...\)` → `$...$` and `\[...\]` → `$$...$$`.
-- Repairs copied display-math artifacts such as standalone `[ ... ]` blocks.
-- Repairs ChatGPT clipboard artifacts such as `# [ formula ... ]`.
-- Converts escaped math tokens such as `U\_r` → `U_r` **inside math only**.
-- Heuristically converts copied inline math such as `(x)` and `(U\_r(x))` while avoiding ordinary prose where possible.
-- Optional cleanup for suspicious empty emphasis fragments such as `** **` (disabled by default because Markdown emphasis boundaries can be semantically meaningful).
-- No runtime dependencies, network requests, telemetry, accounts, or external services.
-- Desktop and mobile compatible.
+- Converts ChatGPT/LaTeX delimiters into Obsidian-friendly MathJax syntax:
+  - `\(...\)` → `$...$`
+  - `\[...\]` → `$$...$$`
+- Repairs common damaged display-math forms such as standalone `[ ... ]` blocks and `# [ ... ]` clipboard artifacts.
+- Normalizes escaped math tokens such as `U\_r` → `U_r` **inside detected math**.
+- Heuristically recognizes inline expressions such as `(x)` and `(U\_r(x))`.
+- Protects fenced code blocks and inline code from math conversion.
+- No network requests, telemetry, accounts, API keys, or external services.
+- Works on desktop and mobile Obsidian.
 
-## Commands
+## Usage
 
-Open the command palette and use:
+Open the Obsidian command palette and run one of the following commands:
 
-- **Paste with conversion**
-- **Convert selection or current note**
-- **Preview conversion for selection or current note**
+| Command | What it does |
+| --- | --- |
+| **Paste with conversion** | Reads the clipboard, converts supported ChatGPT artifacts, and inserts the result. |
+| **Convert selection or current note** | Converts the current selection; if nothing is selected, converts the whole note. |
+| **Preview conversion for selection or current note** | Shows the converted result before replacing the original text. |
 
-When text is selected, the editor context menu also exposes conversion and preview actions.
+When text is selected, conversion and preview actions are also available from the editor context menu.
 
-## Default behavior
+### Automatic paste conversion
 
-Automatic paste conversion defaults to **Detected ChatGPT/math copies only**. The plugin scores clipboard text for signals such as malformed display-math delimiters, escaped subscripts, and LaTeX commands. Ordinary pasted text is left alone.
+By default, the plugin only intercepts a normal paste when the clipboard looks like ChatGPT/math content. Detection uses signals such as malformed display-math delimiters, escaped subscripts, and LaTeX commands.
 
-You can switch automatic conversion off entirely and only use the manual commands.
+If you prefer fully explicit behavior, set automatic paste conversion to **Off** and use the commands above instead.
+
+## What gets repaired
+
+| Clipboard form | Obsidian output |
+| --- | --- |
+| `\(x\)` | `$x$` |
+| `\[x\]` | `$$ x $$` |
+| multiline `[ ... ]` math block | `$$ ... $$` |
+| malformed `# [ ... ]` math block | `$$ ... $$` |
+| `U\_r` inside math | `U_r` |
+| obvious inline math such as `(U\_r(x))` | `$U_r(x)$` |
+
+The converter is intentionally conservative. It repairs syntax and a limited set of high-confidence structural artifacts; it does **not** try to reconstruct arbitrary missing mathematical meaning.
 
 ## Settings
 
 ### Automatic paste conversion
 
-Controls whether the normal paste event is intercepted.
+Controls whether the regular Obsidian paste event is intercepted.
 
 ### Inline math detection
 
 - **Strict** — only strong LaTeX/math signals.
-- **Balanced** — default; additionally recognizes contextual variables such as Chinese prose followed by `(x)`.
+- **Balanced** — default; recognizes common contextual inline math without being overly aggressive.
 - **Aggressive** — converts more short parenthesized math-like expressions.
 
 ### Repair copied display math
 
-Handles forms such as:
+Repairs malformed blocks such as:
 
 ```text
 [
@@ -92,91 +123,112 @@ and:
 
 ### Repair obvious missing relation
 
-Some ChatGPT clipboard representations lose the visual relation between the first line and the rest of a display equation. For the specific malformed `# [ LHS` pattern, the plugin can restore an `=` only when the first two lines look unambiguously like a left-hand side and right-hand side.
+For a narrow class of malformed `# [ LHS ... ]` clipboard blocks, the plugin can restore an `=` when the first two lines look unambiguously like the left- and right-hand sides of an equation.
 
-This is deliberately conservative: the plugin does **not** attempt to reconstruct arbitrary mathematical meaning.
+This option is deliberately conservative.
 
 ## Installation
 
-### From a release ZIP
+The plugin is not yet available in the Obsidian Community Plugins directory.
 
-1. Extract the install ZIP.
-2. Copy the folder into your vault at:
+### Manual installation from source
 
-   ```text
-   <vault>/.obsidian/plugins/chatgpt-paste-formatter/
-   ```
-
-3. Ensure the folder contains:
-
-   ```text
-   main.js
-   manifest.json
-   styles.css
-   ```
-
-4. Restart/reload Obsidian.
-5. Open **Settings → Community plugins** and enable **ChatGPT Paste Formatter**.
-
-### Development
+Requirements: Node.js and npm.
 
 ```bash
+git clone https://github.com/Lortzing/obsidian-chatgpt-paste-formatter.git
+cd obsidian-chatgpt-paste-formatter
 npm install
-npm run dev
-```
-
-Production build:
-
-```bash
 npm run build
 ```
 
-The source follows the official Obsidian sample-plugin pattern: TypeScript source, esbuild bundling, `manifest.json`, `versions.json`, and release assets containing `main.js`, `manifest.json`, and optional `styles.css`.
-
-## Conversion pipeline
-
-The converter is intentionally separated from the Obsidian UI so it can be tested independently.
+Then create the plugin directory in your vault:
 
 ```text
-clipboard/editor text
-        │
-        ├─ split and protect fenced code blocks
-        │
-        ├─ clean safe clipboard artifacts
-        │
-        ├─ convert explicit LaTeX delimiters
-        │
-        ├─ repair malformed ChatGPT display-math blocks
-        │
-        ├─ normalize escapes inside detected math
-        │
-        ├─ protect inline code / existing math
-        │
-        └─ conservative inline-math heuristics
-                │
-                ▼
-        Obsidian Markdown + MathJax
+<Vault>/.obsidian/plugins/chatgpt-paste-formatter/
 ```
 
-Core conversion logic lives in `src/converter.ts`; Obsidian integration is kept in `src/main.ts`, with UI settings and preview modal in separate files.
+and copy these files from the repository into it:
 
-## Examples
+```text
+main.js
+manifest.json
+styles.css
+```
 
-See:
+Reload Obsidian, then enable **ChatGPT Paste Formatter** under **Settings → Community plugins**.
 
-- `examples/chatgpt-input.md`
-- `examples/obsidian-output.md`
+## Development
 
-The examples cover the malformed formats the plugin was initially built to repair.
+Install dependencies:
 
-## Privacy and security
+```bash
+npm install
+```
 
-All conversion happens locally in memory. The plugin does not make network requests and does not collect telemetry.
+Start the development build:
+
+```bash
+npm run dev
+```
+
+Run converter tests:
+
+```bash
+npm test
+```
+
+Run tests and a production build together:
+
+```bash
+npm run check
+```
+
+### Project structure
+
+```text
+src/
+├── main.ts            # Obsidian plugin integration
+├── converter.ts       # clipboard/text conversion engine
+├── preview-modal.ts   # conversion preview UI
+└── settings.ts        # plugin settings UI
+
+examples/              # representative ChatGPT input/output samples
+scripts/               # converter test runner
+manifest.json          # Obsidian plugin manifest
+styles.css             # plugin UI styles
+```
+
+The conversion engine is kept separate from the Obsidian UI so it can be tested independently.
+
+## Privacy
+
+All conversion happens locally in memory. The plugin does not send note or clipboard content anywhere and does not include telemetry.
 
 ## Limitations
 
-Clipboard representations can lose information before Obsidian receives the text. This plugin repairs syntax and a small set of highly confident structural artifacts; it cannot reliably infer arbitrary operators or symbols that are completely absent from the clipboard. For important equations, use the preview command before applying the conversion.
+The clipboard may lose information before Obsidian receives it. If an operator, symbol, or part of an equation is completely absent from the copied text, the plugin cannot reliably infer it.
+
+For important equations or large notes, use **Preview conversion** before applying changes.
+
+## Roadmap
+
+- Expand test coverage with more real ChatGPT clipboard samples.
+- Improve structural parsing of damaged display math.
+- Reduce false positives in inline-math detection.
+- Publish packaged GitHub releases.
+- Submit the plugin to the Obsidian Community Plugins directory once the converter is sufficiently stable.
+
+## Contributing
+
+Bug reports and real-world examples of broken ChatGPT clipboard output are especially useful. Please open an issue with:
+
+1. the text copied from ChatGPT,
+2. the current conversion result, and
+3. the expected Obsidian Markdown.
+
+Pull requests are welcome.
 
 ## License
 
-MIT
+[MIT](LICENSE)
