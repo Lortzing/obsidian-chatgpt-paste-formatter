@@ -64,25 +64,25 @@ marker = "  console.log('All converter tests passed.');"
 regression = r"""
   {
     const input = `[
-\Delta W
+\\Delta W
 ========
 
-# -r\frac{-10}{10}
+# -r\\frac{-10}{10}
 
 +r.
 ]`;
     const out = convertChatGPTToObsidian(input).output;
     assert.equal(out, `$$
-\Delta W
+\\Delta W
 =
--r\frac{-10}{10}
+-r\\frac{-10}{10}
 +r.
 $$`);
   }
 
   {
     const input = `[
-\Delta W
+\\Delta W
 ========
 
 # Ordinary heading
