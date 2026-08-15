@@ -23,7 +23,9 @@ jobs:
           cache: npm
 
       - name: Apply converter and regression-test patch
-        run: python .github/fix-long-fixtures-0.1.7.py
+        run: |
+          python .github/adjust-fix-0.1.7.py
+          python .github/fix-long-fixtures-0.1.7.py
 
       - name: Bump version to 0.1.7
         shell: bash
@@ -60,6 +62,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/adjust-fix-0.1.7.py
           git rm .github/fix-long-fixtures-0.1.7.py
           git rm .github/workflows/finalize-0.1.7.yml
           git rm .github/workflows/probe-long-fixtures.yml
