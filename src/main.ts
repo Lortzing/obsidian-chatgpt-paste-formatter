@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Menu, Notice, Plugin } from 'obsidian';
+import { Editor, Menu, Notice, Plugin } from 'obsidian';
 import {
   convertChatGPTToObsidian,
   DEFAULT_SETTINGS,
@@ -25,7 +25,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
           editor.replaceSelection(result.output);
           this.notify(result.changed ? 'Pasted with ChatGPT formatting repaired.' : 'Pasted; no conversion was needed.');
         } catch {
-          new Notice('Clipboard access failed. Paste normally, select the text, then run “Convert selection or note”.');
+          new Notice('Clipboard access failed. Paste normally, select the text, then run the conversion command.');
         }
       },
     });
@@ -44,6 +44,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on('editor-paste', (event, editor) => {
+        if (event.defaultPrevented) return;
         if (this.settings.autoPasteMode === 'off') return;
         const text = event.clipboardData?.getData('text/plain') ?? '';
         if (!text) return;
@@ -59,17 +60,16 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     );
 
     this.registerEvent(
-      this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
-        void view;
+      this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor) => {
         if (!editor.somethingSelected()) return;
         menu.addItem((item) =>
           item
-            .setTitle('Convert ChatGPT text')
+            .setTitle('Convert copied text')
             .onClick(() => this.convertSelectionOrNote(editor, false)),
         );
         menu.addItem((item) =>
           item
-            .setTitle('Preview ChatGPT conversion')
+            .setTitle('Preview conversion')
             .onClick(() => this.convertSelectionOrNote(editor, true)),
         );
       }),
