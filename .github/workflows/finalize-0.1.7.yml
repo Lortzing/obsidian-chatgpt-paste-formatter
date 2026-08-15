@@ -67,11 +67,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/adjust-fix-0.1.7.py
-          git rm .github/fix-long-fixtures-0.1.7.py
-          git rm .github/workflows/finalize-0.1.7.yml
-          git add -u .github/workflows/probe-long-fixtures.yml scripts/probe-long.mjs
-          git add src/converter.ts scripts/test-converter.mjs package.json package-lock.json manifest.json versions.json
+          rm -f .github/adjust-fix-0.1.7.py
+          rm -f .github/fix-long-fixtures-0.1.7.py
+          rm -f .github/workflows/finalize-0.1.7.yml
+          rm -f .github/workflows/probe-long-fixtures.yml
+          rm -f scripts/probe-long.mjs
+          git add -A
           git commit -m "fix: harden multiline math recovery from real ChatGPT copies"
           git push origin HEAD:main
 
