@@ -28,7 +28,7 @@ helper = r"""function looksLikeMathHeadingArtifact(text: string): boolean {
   if (/[=<>≤≥≈≠∈∉∝→←↔±×÷∑∏√∞∂∇]/.test(value)) return true;
   if (/[A-Za-z0-9)\]}]\s*[+\-*/]\s*(?:[A-Za-z0-9({]|\[)/.test(value)) return true;
 
-  return /^[+\-]?(?:[A-Za-z]|\d)[A-Za-z0-9\s\\_{}()[\],.;:+\-*/=<>|^'!%&]*$/.test(value)
+  return /^[+-]?(?:[A-Za-z]|\d)[A-Za-z0-9\s\\_{}()[\],.;:+\-*/=<>|^'!%&]*$/.test(value)
     && /[+\-*/^_{}()[\]\\]/.test(value);
 }
 
