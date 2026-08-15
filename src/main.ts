@@ -9,12 +9,6 @@ import { setLanguagePreference, t } from './i18n';
 import { ConversionPreviewModal } from './preview-modal';
 import { FormatterSettingTab } from './settings';
 
-const LOCALIZED_COMMAND_IDS = [
-  'paste-with-conversion',
-  'convert-selection-or-note',
-  'preview-selection-or-note',
-] as const;
-
 export default class ChatGPTPasteFormatterPlugin extends Plugin {
   settings: FormatterSettings = { ...DEFAULT_SETTINGS };
 
@@ -61,14 +55,9 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     );
   }
 
-  refreshLocalizedCommands(): void {
-    for (const id of LOCALIZED_COMMAND_IDS) this.removeCommand(id);
-    this.registerLocalizedCommands();
-  }
-
   async loadSettings(): Promise<void> {
-    const saved = (await this.loadData()) as Partial<FormatterSettings> | null;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {}) as FormatterSettings;
+    const saved = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
     setLanguagePreference(this.settings.language);
   }
 
