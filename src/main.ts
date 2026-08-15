@@ -56,8 +56,11 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const saved = await this.loadData();
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
+    const saved: unknown = await this.loadData();
+    const stored = saved !== null && typeof saved === 'object'
+      ? saved as Partial<FormatterSettings>
+      : {};
+    this.settings = { ...DEFAULT_SETTINGS, ...stored };
     setLanguagePreference(this.settings.language);
   }
 
