@@ -12,20 +12,45 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-      - run: npm install
-      - run: npm run check
-      - name: Create release package
+          cache-dependency-path: package-lock.json
+
+      - name: Verify tag matches manifest version
+        shell: bash
         run: |
-          mkdir release
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [[ "$GITHUB_REF_NAME" != "$MANIFEST_VERSION" ]]; then
+            echo "Release tag '$GITHUB_REF_NAME' must exactly match manifest version '$MANIFEST_VERSION'."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ -f package-lock.json ]]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - run: npm run check
+
+      - name: Create release package
+        shell: bash
+        run: |
+          mkdir -p release
           cp main.js manifest.json styles.css release/
-          cd release && zip ../chatgpt-paste-formatter-${GITHUB_REF_NAME}.zip main.js manifest.json styles.css
+          cd release
+          zip ../chatgpt-paste-formatter-${GITHUB_REF_NAME}.zip main.js manifest.json styles.css
+
       - uses: softprops/action-gh-release@v2
         with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             main.js
             manifest.json
