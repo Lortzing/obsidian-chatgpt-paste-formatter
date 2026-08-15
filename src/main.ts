@@ -5,9 +5,15 @@ import {
   detectChatGPTMathCopy,
   type FormatterSettings,
 } from './converter';
-import { t } from './i18n';
+import { setLanguagePreference, t } from './i18n';
 import { ConversionPreviewModal } from './preview-modal';
 import { FormatterSettingTab } from './settings';
+
+const LOCALIZED_COMMAND_IDS = [
+  'paste-with-conversion',
+  'convert-selection-or-note',
+  'preview-selection-or-note',
+] as const;
 
 export default class ChatGPTPasteFormatterPlugin extends Plugin {
   settings: FormatterSettings = { ...DEFAULT_SETTINGS };
@@ -15,33 +21,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.addSettingTab(new FormatterSettingTab(this.app, this));
-
-    this.addCommand({
-      id: 'paste-with-conversion',
-      name: t('command.paste'),
-      editorCallback: async (editor) => {
-        try {
-          const text = await navigator.clipboard.readText();
-          const result = convertChatGPTToObsidian(text, this.settings);
-          editor.replaceSelection(result.output);
-          this.notify(result.changed ? t('notice.pasteRepaired') : t('notice.pasteUnchanged'));
-        } catch {
-          new Notice(t('notice.clipboardFailed'));
-        }
-      },
-    });
-
-    this.addCommand({
-      id: 'convert-selection-or-note',
-      name: t('command.convert'),
-      editorCallback: (editor) => this.convertSelectionOrNote(editor, false),
-    });
-
-    this.addCommand({
-      id: 'preview-selection-or-note',
-      name: t('command.preview'),
-      editorCallback: (editor) => this.convertSelectionOrNote(editor, true),
-    });
+    this.registerLocalizedCommands();
 
     this.registerEvent(
       this.app.workspace.on('editor-paste', (event, editor) => {
@@ -57,6 +37,10 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
 
         event.preventDefault();
         editor.replaceSelection(result.output);
+
+        if (this.settings.showAutoPasteNotices) {
+          new Notice(result.changed ? t('notice.autoRepaired') : t('notice.autoUnchanged'));
+        }
       }),
     );
 
@@ -77,12 +61,48 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     );
   }
 
+  refreshLocalizedCommands(): void {
+    for (const id of LOCALIZED_COMMAND_IDS) this.removeCommand(id);
+    this.registerLocalizedCommands();
+  }
+
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as FormatterSettings;
+    const saved = (await this.loadData()) as Partial<FormatterSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {}) as FormatterSettings;
+    setLanguagePreference(this.settings.language);
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  private registerLocalizedCommands(): void {
+    this.addCommand({
+      id: 'paste-with-conversion',
+      name: t('command.paste'),
+      editorCallback: async (editor) => {
+        try {
+          const text = await navigator.clipboard.readText();
+          const result = convertChatGPTToObsidian(text, this.settings);
+          editor.replaceSelection(result.output);
+          new Notice(result.changed ? t('notice.pasteRepaired') : t('notice.pasteUnchanged'));
+        } catch {
+          new Notice(t('notice.clipboardFailed'));
+        }
+      },
+    });
+
+    this.addCommand({
+      id: 'convert-selection-or-note',
+      name: t('command.convert'),
+      editorCallback: (editor) => this.convertSelectionOrNote(editor, false),
+    });
+
+    this.addCommand({
+      id: 'preview-selection-or-note',
+      name: t('command.preview'),
+      editorCallback: (editor) => this.convertSelectionOrNote(editor, true),
+    });
   }
 
   private convertSelectionOrNote(editor: Editor, preview: boolean): void {
@@ -93,7 +113,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     const apply = () => {
       if (hasSelection) editor.replaceSelection(result.output);
       else editor.setValue(result.output);
-      this.notify(result.changed ? t('notice.applied') : t('notice.unchanged'));
+      new Notice(result.changed ? t('notice.applied') : t('notice.unchanged'));
     };
 
     if (preview) {
@@ -101,9 +121,5 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
       return;
     }
     apply();
-  }
-
-  private notify(message: string): void {
-    if (this.settings.showNotices) new Notice(message);
   }
 }
