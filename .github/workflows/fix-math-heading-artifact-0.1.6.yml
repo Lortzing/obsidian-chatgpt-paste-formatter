@@ -1,0 +1,138 @@
+name: Finalize 0.1.6 math heading fix
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Patch math heading artifacts and add regression test
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          converter_path = Path('src/converter.ts')
+          converter = converter_path.read_text()
+
+          old_reject = "  if (/^\\s*(?:[-*+]\\s+|\\d+[.)]\\s+|>\\s+|#{1,6}\\s+)/m.test(body)) return false;\n"
+          new_reject = """  if (/^\\s*(?:[-*+]\\s+|\\d+[.)]\\s+|>\\s+)/m.test(body)) return false;\n\n  const headingPayloads = body\n    .split('\\n')\n    .map((line) => line.match(/^\\s*#{1,6}\\s+(.+)$/)?.[1] ?? null)\n    .filter((line): line is string => line !== null);\n  if (headingPayloads.some((line) => !looksLikeMathHeadingArtifact(line))) return false;\n"""
+          if old_reject not in converter:
+            raise SystemExit('heading rejection marker not found')
+          converter = converter.replace(old_reject, new_reject, 1)
+
+          helper_marker = "function cleanDisplayBody(\n"
+          helper = r'''function looksLikeMathHeadingArtifact(text: string): boolean {
+            const value = text.trim();
+            if (!value || value.length > 1000) return false;
+            if (/https?:\/\/|www\./i.test(value)) return false;
+
+            if (/\\[A-Za-z]+/.test(value)) return true;
+            if (/(?:\^|_)(?:\{[^{}\n]+\}|[A-Za-z0-9])/.test(value)) return true;
+            if (/[=<>≤≥≈≠∈∉∝→←↔±×÷∑∏√∞∂∇]/.test(value)) return true;
+            if (/[A-Za-z0-9)\]}]\s*[+\-*/]\s*(?:[A-Za-z0-9({]|\[)/.test(value)) return true;
+
+            return /^[+\-]?(?:[A-Za-z]|\d)[A-Za-z0-9\s\\_{}()[\],.;:+\-*/=<>|^'!%&]*$/.test(value)
+              && /[+\-*/^_{}()[\]\\]/.test(value);
+          }
+
+          '''
+          if helper_marker not in converter:
+            raise SystemExit('cleanDisplayBody marker not found')
+          converter = converter.replace(helper_marker, helper + helper_marker, 1)
+
+          old_clean = r'''    if (open.kind === 'malformed') {
+              const match = line.match(/^\s*#{1,6}\s+(.+)$/);
+              if (match) {
+                heading = true;
+                line = match[1];
+                stats.cleanedArtifacts += 1;
+              }
+            }
+'''
+          new_clean = r'''    const match = line.match(/^\s*#{1,6}\s+(.+)$/);
+            if (match && (open.kind === 'malformed' || looksLikeMathHeadingArtifact(match[1]))) {
+              heading = true;
+              line = match[1];
+              stats.cleanedArtifacts += 1;
+            }
+'''
+          if old_clean not in converter:
+            raise SystemExit('display cleaning marker not found')
+          converter = converter.replace(old_clean, new_clean, 1)
+          converter_path.write_text(converter)
+
+          tests_path = Path('scripts/test-converter.mjs')
+          tests = tests_path.read_text()
+          marker = "  console.log('All converter tests passed.');"
+          regression = r'''
+            {
+              const input = `[\n\\Delta W\n========\n\n# -r\\frac{-10}{10}\n\n+r.\n]`;
+              const out = convertChatGPTToObsidian(input).output;
+              assert.equal(out, `$$\n\\Delta W\n=\n-r\\frac{-10}{10}\n+r.\n$$`);
+            }
+
+            {
+              const input = `[\n\\Delta W\n========\n\n# Ordinary heading\n\n+r.\n]`;
+              const out = convertChatGPTToObsidian(input).output;
+              assert.equal(out, input, 'Ordinary Markdown headings inside bracket blocks must remain untouched');
+            }
+
+          ''' + marker
+          if marker not in tests:
+            raise SystemExit('test insertion marker not found')
+          tests_path.write_text(tests.replace(marker, regression, 1))
+
+          for filename in ('package.json', 'manifest.json'):
+            path = Path(filename)
+            data = json.loads(path.read_text())
+            data['version'] = '0.1.6'
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+
+          versions_path = Path('versions.json')
+          versions = json.loads(versions_path.read_text())
+          versions['0.1.6'] = '1.7.2'
+          versions_path.write_text(json.dumps(versions, indent=2, ensure_ascii=False) + '\n')
+          PY
+
+      - name: Synchronize lockfile
+        run: npm install --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify implementation
+        run: npm run check
+
+      - name: Commit implementation and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-math-heading-artifact-0.1.6.yml
+          git add src/converter.ts scripts/test-converter.mjs package.json package-lock.json manifest.json versions.json
+          git commit -m "fix: recognize math heading artifacts in display blocks"
+          git push origin HEAD:main
+
+      - name: Tag 0.1.6
+        run: |
+          git tag 0.1.6
+          git push origin 0.1.6
