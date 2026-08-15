@@ -33,7 +33,6 @@ export class FormatterSettingTab extends PluginSettingTab {
             this.plugin.settings.language = language;
             setLanguagePreference(language);
             await this.plugin.saveSettings();
-            this.plugin.refreshLocalizedCommands();
             this.display();
           }),
       );
