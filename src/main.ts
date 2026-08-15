@@ -4,7 +4,7 @@ import {
   DEFAULT_SETTINGS,
   detectChatGPTMathCopy,
   type FormatterSettings,
-} from './converter';
+} from './formatter';
 import { setLanguagePreference, t } from './i18n';
 import { ConversionPreviewModal } from './preview-modal';
 import { FormatterSettingTab } from './settings';
