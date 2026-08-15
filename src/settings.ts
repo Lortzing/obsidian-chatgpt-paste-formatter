@@ -1,7 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type ChatGPTPasteFormatterPlugin from './main';
 import type { AutoPasteMode, InlineMathMode } from './converter';
-import { t } from './i18n';
+import { setLanguagePreference, t, type LanguagePreference, type TranslationKey } from './i18n';
 
 export class FormatterSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: ChatGPTPasteFormatterPlugin) {
@@ -14,8 +14,31 @@ export class FormatterSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(t('settings.title'))
-      .setDesc(t('settings.languageHint'))
+      .setDesc(t('settings.subtitle'))
       .setHeading();
+
+    this.addSection('settings.section.general');
+
+    new Setting(containerEl)
+      .setName(t('settings.language.name'))
+      .setDesc(t('settings.language.desc'))
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption('system', t('settings.language.system'))
+          .addOption('zh-cn', t('settings.language.zh'))
+          .addOption('en', t('settings.language.en'))
+          .setValue(this.plugin.settings.language)
+          .onChange(async (value) => {
+            const language = value as LanguagePreference;
+            this.plugin.settings.language = language;
+            setLanguagePreference(language);
+            await this.plugin.saveSettings();
+            this.plugin.refreshLocalizedCommands();
+            this.display();
+          }),
+      );
+
+    this.addSection('settings.section.paste');
 
     new Setting(containerEl)
       .setName(t('settings.autoPaste.name'))
@@ -31,6 +54,8 @@ export class FormatterSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+
+    this.addSection('settings.section.detection');
 
     new Setting(containerEl)
       .setName(t('settings.inlineMath.name'))
@@ -67,12 +92,34 @@ export class FormatterSettingTab extends PluginSettingTab {
         }),
       );
 
+    this.addSection('settings.section.repair');
+
     new Setting(containerEl)
       .setName(t('settings.escapes.name'))
       .setDesc(t('settings.escapes.desc'))
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.normalizeMathEscapes).onChange(async (value) => {
           this.plugin.settings.normalizeMathEscapes = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName(t('settings.repeatedEquals.name'))
+      .setDesc(t('settings.repeatedEquals.desc'))
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.repairRepeatedEquals).onChange(async (value) => {
+          this.plugin.settings.repairRepeatedEquals = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName(t('settings.mergeMath.name'))
+      .setDesc(t('settings.mergeMath.desc'))
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.mergeAdjacentDisplayMath).onChange(async (value) => {
+          this.plugin.settings.mergeAdjacentDisplayMath = value;
           await this.plugin.saveSettings();
         }),
       );
@@ -97,14 +144,20 @@ export class FormatterSettingTab extends PluginSettingTab {
         }),
       );
 
+    this.addSection('settings.section.notifications');
+
     new Setting(containerEl)
-      .setName(t('settings.notices.name'))
-      .setDesc(t('settings.notices.desc'))
+      .setName(t('settings.autoNotices.name'))
+      .setDesc(t('settings.autoNotices.desc'))
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.showNotices).onChange(async (value) => {
-          this.plugin.settings.showNotices = value;
+        toggle.setValue(this.plugin.settings.showAutoPasteNotices).onChange(async (value) => {
+          this.plugin.settings.showAutoPasteNotices = value;
           await this.plugin.saveSettings();
         }),
       );
+  }
+
+  private addSection(key: TranslationKey): void {
+    new Setting(this.containerEl).setName(t(key)).setHeading();
   }
 }
