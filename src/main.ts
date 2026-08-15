@@ -67,10 +67,6 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     this.registerDomEvent(document, 'keyup', () => this.syncSidebarSelection());
   }
 
-  onunload(): void {
-    this.app.workspace.detachLeavesOfType(CONVERTER_VIEW_TYPE);
-  }
-
   async loadSettings(): Promise<void> {
     const saved: unknown = await this.loadData();
     const stored = saved !== null && typeof saved === 'object'
