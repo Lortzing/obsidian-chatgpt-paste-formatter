@@ -30,16 +30,20 @@ jobs:
 
           eslint = Path('eslint.config.mts')
           text = eslint.read_text()
-          text = text.replace(
-              "allowDefaultProject: ['eslint.config.mts', 'manifest.json']",
-              "allowDefaultProject: ['eslint.config.mts', 'manifest.json', 'scripts/test-converter.mjs']",
-          )
+          if "'scripts/test-converter.mjs'," not in text:
+              text = text.replace(
+                  "'scripts/generate-readme-demo.py',",
+                  "'scripts/generate-readme-demo.py',\n    'scripts/test-converter.mjs',",
+              )
           eslint.write_text(text)
 
           converter = Path('src/converter.ts')
           text = converter.read_text()
-          text = text.replace(r'/[A-Za-z0-9({\[]/', r'/[A-Za-z0-9({[]/')
-          converter.write_text(text)
+          old = r'[A-Za-z0-9({\[]'
+          new = r'[A-Za-z0-9({[]'
+          if old not in text:
+              raise SystemExit('Expected converter regex was not found')
+          converter.write_text(text.replace(old, new, 1))
 
           main = Path('src/main.ts')
           text = main.read_text()
@@ -116,7 +120,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}" \
-            -f description='Convert ChatGPT Markdown and LaTeX into clean, Obsidian-ready notes on paste.'
+            -f description='Convert ChatGPT Markdown and LaTeX into clean, Obsidian-ready notes on paste.' || true
           gh api --method PUT "repos/${GITHUB_REPOSITORY}/topics" \
             -f 'names[]=obsidian' \
             -f 'names[]=obsidian-plugin' \
@@ -125,4 +129,4 @@ jobs:
             -f 'names[]=latex' \
             -f 'names[]=mathjax' \
             -f 'names[]=clipboard' \
-            -f 'names[]=typescript'
+            -f 'names[]=typescript' || true
