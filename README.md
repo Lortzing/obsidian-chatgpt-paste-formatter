@@ -9,9 +9,9 @@
 
 **Copy from ChatGPT → paste into Obsidian → keep formulas and Markdown readable.**
 
-ChatGPT can place visually correct formulas on the clipboard in a form that does not survive a normal paste into Obsidian. Display equations may become stray `[ ... ]` blocks, heading markers can appear in front of formulas, and math escapes such as `U\_r` can remain in the note.
+ChatGPT can place visually correct formulas on the clipboard in a form that does not survive a normal paste into Obsidian. Display equations may become stray `[ ... ]` blocks, heading markers can appear in front of formulas, math escapes such as `U\_r` can remain in the note, and relations can occasionally degrade into strings such as `\===`.
 
-ChatGPT Paste Formatter detects and repairs these common clipboard artifacts locally while protecting fenced code blocks and inline code.
+ChatGPT Paste Formatter detects and repairs these clipboard artifacts locally while protecting fenced code blocks and inline code.
 
 > [!NOTE]
 > This project is currently in beta and is **not yet listed in Obsidian Community Plugins**. BRAT is the recommended installation method for testing.
@@ -66,33 +66,59 @@ $$
   - Off
   - Detected ChatGPT/math copies only *(default)*
   - Always
+- Selectable interface language:
+  - Default — follow Obsidian
+  - 中文
+  - English
 - Converts explicit LaTeX delimiters into Obsidian-friendly MathJax syntax:
   - `\(...\)` → `$...$`
   - `\[...\]` → `$$...$$`
 - Repairs damaged display-math forms such as standalone `[ ... ]` blocks and `# [ ... ]` clipboard artifacts.
+- Repairs compact blocks such as `[ U=[1,2,3] ]` when they are clearly mathematical assignments.
 - Normalizes escaped math tokens such as `U\_r` → `U_r` inside detected math.
+- Optionally collapses repeated relation artifacts such as `\===` and `\========` to `=` *(enabled by default)*.
+- Optionally merges adjacent display-math blocks when the second block clearly continues the same derivation *(enabled by default)*.
 - Heuristically recognizes inline expressions such as `(x)` and `(U\_r(x))`.
 - Protects fenced code blocks and inline code from math conversion.
+- Manual conversions always report whether a change was applied; automatic conversion notices can be enabled separately.
 - No network requests, telemetry, accounts, API keys, or external services.
-- Uses only Obsidian-compatible APIs and is intended to work on desktop and mobile.
 
 ## Usage
+
+### Manual conversion
 
 Open the Obsidian command palette and run one of the following commands:
 
 | Command | What it does |
 | --- | --- |
-| **Paste with conversion** | Reads the clipboard, converts supported ChatGPT artifacts, and inserts the result. |
+| **Paste with conversion** | Reads the clipboard, converts supported artifacts, and inserts the result. |
 | **Convert selection or current note** | Converts the current selection; if nothing is selected, converts the whole note. |
 | **Preview conversion for selection or current note** | Shows the converted result before replacing the original text. |
 
-When text is selected, conversion and preview actions are also available from the editor context menu.
+When text is selected, **Convert copied text** and **Preview conversion** are also available from the editor context menu.
+
+Manual conversions always show a result notice so that an explicit conversion action never fails silently.
 
 ### Automatic paste conversion
 
-By default, the plugin intercepts a normal paste only when the clipboard looks like ChatGPT/math content. Detection uses signals such as malformed display-math delimiters, escaped subscripts, and LaTeX commands.
+By default, regular paste uses **Detected ChatGPT/math copies only**. The plugin does not have access to clipboard provenance and therefore does not literally know that the source application was ChatGPT. Instead, it computes a small heuristic score from textual signatures commonly produced by ChatGPT/math clipboard output.
 
-If you prefer fully explicit behavior, set automatic paste conversion to **Off** and use the commands above instead.
+Automatic conversion runs when the score is at least **2**. Current signals include:
+
+| Signal | Score |
+| --- | ---: |
+| Explicit `\(...\)` math | +2 |
+| Explicit `\[...\]` math | +2 |
+| Malformed heading-style `# [ ... ]` block | +5 |
+| Standalone multiline `[ ... ]` block | +4 |
+| One escaped underscore such as `U\_r` | +1 |
+| Two or more escaped underscores | +2 |
+| One recognized LaTeX command | +1 |
+| Three or more recognized LaTeX commands | +2 |
+| Repeated equals artifact such as `\===` | +2 |
+| Empty emphasis artifact such as `** **` | +1 |
+
+This detector is intentionally based on text structure rather than the clipboard source application. **Off** disables interception entirely; **Always** runs the converter for every regular paste.
 
 ## What gets repaired
 
@@ -102,7 +128,10 @@ If you prefer fully explicit behavior, set automatic paste conversion to **Off**
 | `\[x\]` | `$$ x $$` |
 | multiline `[ ... ]` math block | `$$ ... $$` |
 | malformed `# [ ... ]` math block | `$$ ... $$` |
+| `[ U=[1,2,3] ]` | display math block |
 | `U\_r` inside math | `U_r` |
+| `\===` / `\========` inside math | `=` |
+| adjacent derivation block beginning with `=` or `\approx` | merged into the previous display block |
 | obvious inline math such as `(U\_r(x))` | `$U_r(x)$` |
 
 The converter is intentionally conservative. It repairs syntax and a limited set of high-confidence structural artifacts; it does **not** try to reconstruct arbitrary missing mathematical meaning.
@@ -120,8 +149,6 @@ The converter is intentionally conservative. It repairs syntax and a limited set
    ```
 
 4. Enable **ChatGPT Paste Formatter** under **Settings → Community plugins**.
-
-BRAT installs published GitHub release assets. If no release is visible yet, use the source installation below until the first release is published.
 
 ### GitHub Releases
 
@@ -148,7 +175,7 @@ Requirements: Node.js and npm.
 ```bash
 git clone https://github.com/Lortzing/obsidian-chatgpt-paste-formatter.git
 cd obsidian-chatgpt-paste-formatter
-npm install
+npm ci
 npm run check
 ```
 
@@ -156,46 +183,72 @@ Copy `main.js`, `manifest.json`, and `styles.css` into the plugin directory show
 
 ## Settings
 
-### Automatic paste conversion
+Settings are organized into **General**, **Paste behavior**, **Math detection**, **Repair rules**, and **Notifications**.
 
-Controls whether the regular Obsidian paste event is intercepted.
+### General
 
-### Inline math detection
+#### Interface language
 
-- **Strict** — only strong LaTeX/math signals.
-- **Balanced** — default; recognizes common contextual inline math without being overly aggressive.
-- **Aggressive** — converts more short parenthesized math-like expressions.
+Choose **Default (follow Obsidian)**, **中文**, or **English**. Settings, context menus, preview UI, and notices use the selected language immediately. Command palette names are registered when the plugin loads, so changing the language requires a plugin reload before those command names change.
 
-### Repair copied display math
+### Paste behavior
 
-Repairs malformed blocks such as:
+#### Automatic paste conversion
 
-```text
-[
-U(x)=
-[U\_1(x),U\_2(x)]
-]
-```
+- **Off** — never intercept ordinary paste.
+- **Detected ChatGPT/math copies only** — default; convert only when the detector score is at least 2.
+- **Always** — run the converter for every ordinary paste.
 
-and:
+### Math detection
 
-```text
-# [ L\_{\mathrm{CE}}
+#### Inline math detection
 
--\sum_i \log P(r_i\mid x_i)
-]
-```
+This setting only controls heuristic conversion of ordinary parentheses such as `(x)`. Explicit LaTeX delimiters are handled separately.
 
-### Repair obvious missing relation
+- **Strict** — requires strong mathematical syntax inside the parentheses. Expressions containing LaTeX commands, subscripts/superscripts, relation/operators, or clear mathematical structure can be converted, but a plain `(x)` is normally left alone.
+- **Balanced** — default. Includes Strict behavior and also recognizes simple variables in mathematical/prose context, for example Chinese explanatory prose containing `其中 (x) 表示...`.
+- **Aggressive** — includes Balanced behavior and accepts more short variable/function-like parenthesized expressions even when contextual evidence is weaker. This can capture more copied formulas but has the highest false-positive risk.
+
+The converter still avoids obvious non-math cases such as URLs, Markdown link destinations, and plain numeric parenthetical text.
+
+#### Convert LaTeX delimiters
+
+Converts `\(...\)` and `\[...\]` into Obsidian `$...$` and `$$...$$` syntax.
+
+#### Repair copied display math
+
+Repairs malformed standalone `[ ... ]` and heading-style `# [ ... ]` blocks when the contents look mathematical.
+
+### Repair rules
+
+#### Normalize escaped math symbols
+
+Inside detected math, converts clipboard escapes such as `U\_r` and `\+` back to `U_r` and `+`.
+
+#### Collapse repeated equals signs
+
+Enabled by default. Converts repeated-equals clipboard artifacts such as `\===` and `\========` to one `=` inside recognized math blocks.
+
+#### Merge adjacent display-math continuations
+
+Enabled by default. Adjacent display blocks are merged only when there is strong evidence of a continuous derivation — for example, the next formula begins with `=`, `\approx`, `\equiv`, `\sim`, `\leq`, `\geq`, an arrow, or another continuation operator. Two unrelated neighboring formulas are kept separate.
+
+#### Repair obvious missing relation
 
 For a narrow class of malformed `# [ LHS ... ]` clipboard blocks, the plugin can restore an `=` when the first two lines look unambiguously like the left- and right-hand sides of an equation.
 
-This option is deliberately conservative.
+#### Clean empty emphasis artifacts
+
+Off by default because removing empty emphasis markers can alter neighboring Markdown emphasis in unusual clipboard content.
+
+### Notifications
+
+Manual conversion actions always show a result notice. **Automatic conversion notices** only controls notifications produced by intercepted ordinary paste and is off by default.
 
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -215,6 +268,7 @@ npm run check
 src/
 ├── main.ts            # Obsidian plugin integration
 ├── converter.ts       # clipboard/text conversion engine
+├── i18n.ts            # English/Chinese localization
 ├── preview-modal.ts   # conversion preview UI
 └── settings.ts        # plugin settings UI
 
