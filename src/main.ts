@@ -5,6 +5,7 @@ import {
   detectChatGPTMathCopy,
   type FormatterSettings,
 } from './converter';
+import { t } from './i18n';
 import { ConversionPreviewModal } from './preview-modal';
 import { FormatterSettingTab } from './settings';
 
@@ -17,28 +18,28 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
 
     this.addCommand({
       id: 'paste-with-conversion',
-      name: 'Paste with conversion',
+      name: t('command.paste'),
       editorCallback: async (editor) => {
         try {
           const text = await navigator.clipboard.readText();
           const result = convertChatGPTToObsidian(text, this.settings);
           editor.replaceSelection(result.output);
-          this.notify(result.changed ? 'Pasted with ChatGPT formatting repaired.' : 'Pasted; no conversion was needed.');
+          this.notify(result.changed ? t('notice.pasteRepaired') : t('notice.pasteUnchanged'));
         } catch {
-          new Notice('Clipboard access failed. Paste normally, select the text, then run the conversion command.');
+          new Notice(t('notice.clipboardFailed'));
         }
       },
     });
 
     this.addCommand({
       id: 'convert-selection-or-note',
-      name: 'Convert selection or current note',
+      name: t('command.convert'),
       editorCallback: (editor) => this.convertSelectionOrNote(editor, false),
     });
 
     this.addCommand({
       id: 'preview-selection-or-note',
-      name: 'Preview conversion for selection or current note',
+      name: t('command.preview'),
       editorCallback: (editor) => this.convertSelectionOrNote(editor, true),
     });
 
@@ -64,12 +65,12 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
         if (!editor.somethingSelected()) return;
         menu.addItem((item) =>
           item
-            .setTitle('Convert copied text')
+            .setTitle(t('menu.convert'))
             .onClick(() => this.convertSelectionOrNote(editor, false)),
         );
         menu.addItem((item) =>
           item
-            .setTitle('Preview conversion')
+            .setTitle(t('menu.preview'))
             .onClick(() => this.convertSelectionOrNote(editor, true)),
         );
       }),
@@ -92,7 +93,7 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
     const apply = () => {
       if (hasSelection) editor.replaceSelection(result.output);
       else editor.setValue(result.output);
-      this.notify(result.changed ? 'Conversion applied.' : 'No conversion was needed.');
+      this.notify(result.changed ? t('notice.applied') : t('notice.unchanged'));
     };
 
     if (preview) {
