@@ -307,7 +307,13 @@ export function looksLikeDisplayMath(lines: string[]): boolean {
   if (!body || body.length > 4000) return false;
 
   if (/https?:\/\/|www\./i.test(body)) return false;
-  if (/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s+|#{1,6}\s+)/m.test(body)) return false;
+  if (/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s+)/m.test(body)) return false;
+
+  const headingPayloads = body
+    .split('\n')
+    .map((line) => line.match(/^\s*#{1,6}\s+(.+)$/)?.[1] ?? null)
+    .filter((line): line is string => line !== null);
+  if (headingPayloads.some((line) => !looksLikeMathHeadingArtifact(line))) return false;
   if (/^\s*(?:```|~~~)/m.test(body)) return false;
   if (/(?:^|[\s,])["'`][^"'`\n]*[A-Za-z\u3400-\u9FFF][^"'`\n]*["'`](?:[\s,]|$)/.test(body)) return false;
 
@@ -340,6 +346,20 @@ export function looksLikeDisplayMath(lines: string[]): boolean {
   return mathAlphabetOnly && body.length <= 1200;
 }
 
+function looksLikeMathHeadingArtifact(text: string): boolean {
+  const value = text.trim();
+  if (!value || value.length > 1000) return false;
+  if (/https?:\/\/|www\./i.test(value)) return false;
+
+  if (/\\[A-Za-z]+/.test(value)) return true;
+  if (/(?:\^|_)(?:\{[^{}\n]+\}|[A-Za-z0-9])/.test(value)) return true;
+  if (/[=<>≤≥≈≠∈∉∝→←↔±×÷∑∏√∞∂∇]/.test(value)) return true;
+  if (/[A-Za-z0-9)\]}]\s*[+\-*/]\s*(?:[A-Za-z0-9({]|\[)/.test(value)) return true;
+
+  return /^[+-]?(?:[A-Za-z]|\d)[A-Za-z0-9\s\\_{}()[\],.;:+\-*/=<>|^'!%&]*$/.test(value)
+    && /[+\-*/^_{}()[\]\\]/.test(value);
+}
+
 function cleanDisplayBody(
   lines: string[],
   open: MathOpen,
@@ -353,13 +373,11 @@ function cleanDisplayBody(
     let line = rawLine;
     let heading = false;
 
-    if (open.kind === 'malformed') {
-      const match = line.match(/^\s*#{1,6}\s+(.+)$/);
-      if (match) {
-        heading = true;
-        line = match[1];
-        stats.cleanedArtifacts += 1;
-      }
+    const match = line.match(/^\s*#{1,6}\s+(.+)$/);
+    if (match && (open.kind === 'malformed' || looksLikeMathHeadingArtifact(match[1]))) {
+      heading = true;
+      line = match[1];
+      stats.cleanedArtifacts += 1;
     }
 
     line = normalizeMath(line.trim(), settings, stats);

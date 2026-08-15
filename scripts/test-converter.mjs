@@ -207,6 +207,38 @@ p\\_i
     }
   }
 
+
+  {
+    const input = `[
+\\Delta W
+========
+
+# -r\\frac{-10}{10}
+
++r.
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+\\Delta W
+=
+-r\\frac{-10}{10}
++r.
+$$`);
+  }
+
+  {
+    const input = `[
+\\Delta W
+========
+
+# Ordinary heading
+
++r.
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, input, 'Ordinary Markdown headings inside bracket blocks must remain untouched');
+  }
+
   console.log('All converter tests passed.');
 } finally {
   await rm(dir, { recursive: true, force: true });
