@@ -6,11 +6,11 @@ import { pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const dir = await mkdtemp(join(tmpdir(), 'chatgpt-paste-formatter-'));
-const outfile = join(dir, 'converter.mjs');
+const outfile = join(dir, 'formatter.mjs');
 
 try {
   await esbuild.build({
-    entryPoints: ['src/converter.ts'],
+    entryPoints: ['src/formatter.ts'],
     bundle: true,
     platform: 'node',
     format: 'esm',
@@ -52,7 +52,6 @@ try {
     assert.match(out, /```python\nx = "\[\\nU\\_r\(x\)\\n\]"\n```/);
     assert.match(out, /正文 \$x\$/);
   }
-
 
   {
     const input = `[
@@ -117,6 +116,44 @@ U=[1,2,3]
     assert.equal(out, `$$
 U=[1,2,3]
 $$`);
+  }
+
+  {
+    const input = `[
+e^{1000}, e^{1001}, e^{1002}
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+e^{1000}, e^{1001}, e^{1002}
+$$`);
+  }
+
+  {
+    const input = `[
+U-m=[-2,-1,0].
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+U-m=[-2,-1,0].
+$$`);
+  }
+
+  {
+    const input = `[
+e^{100}
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+e^{100}
+$$`);
+  }
+
+  {
+    const input = `[
+This is ordinary prose.
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, input);
   }
 
   {
