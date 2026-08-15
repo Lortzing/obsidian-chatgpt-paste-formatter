@@ -130,10 +130,8 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
   }
 
   private async openConverterSidebar(editor?: Editor, wholeNoteIfNoSelection = false): Promise<void> {
-    let leaf = this.app.workspace.getLeavesOfType(CONVERTER_VIEW_TYPE)[0];
-    if (!leaf) {
-      leaf = this.app.workspace.getRightLeaf(false) ?? undefined;
-    }
+    const leaf = this.app.workspace.getLeavesOfType(CONVERTER_VIEW_TYPE)[0]
+      ?? this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
 
     if (leaf.getViewState().type !== CONVERTER_VIEW_TYPE) {
