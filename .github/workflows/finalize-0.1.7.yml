@@ -1,0 +1,93 @@
+name: Finalize 0.1.7 long-fixture repair
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply converter and regression-test patch
+        run: python .github/fix-long-fixtures-0.1.7.py
+
+      - name: Bump version to 0.1.7
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          package = Path('package.json')
+          package_data = json.loads(package.read_text())
+          package_data['version'] = '0.1.7'
+          package.write_text(json.dumps(package_data, indent=2, ensure_ascii=False) + '\n')
+
+          manifest = Path('manifest.json')
+          manifest_data = json.loads(manifest.read_text())
+          manifest_data['version'] = '0.1.7'
+          manifest.write_text(json.dumps(manifest_data, indent=2, ensure_ascii=False) + '\n')
+
+          versions = Path('versions.json')
+          versions_data = json.loads(versions.read_text())
+          versions_data['0.1.7'] = manifest_data['minAppVersion']
+          versions.write_text(json.dumps(versions_data, indent=2, ensure_ascii=False) + '\n')
+          PY
+          npm install --package-lock-only
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify all tests, lint, and build
+        run: npm run check
+
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/fix-long-fixtures-0.1.7.py
+          git rm .github/workflows/finalize-0.1.7.yml
+          git rm .github/workflows/probe-long-fixtures.yml
+          git rm scripts/probe-long.mjs
+          git add src/converter.ts scripts/test-converter.mjs package.json package-lock.json manifest.json versions.json
+          git commit -m "fix: harden multiline math recovery from real ChatGPT copies"
+          git push origin HEAD:main
+
+      - name: Tag 0.1.7
+        run: |
+          git tag 0.1.7
+          git push origin 0.1.7
+
+      - name: Create release package
+        run: zip -j chatgpt-paste-formatter-0.1.7.zip main.js manifest.json styles.css
+
+      - name: Publish 0.1.7 release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: 0.1.7
+          name: 0.1.7
+          body: |
+            - Fix multiline display-math detection when standalone `+`/`-` operators were mistaken for Markdown list markers.
+            - Preserve a real rendered line break when adjacent derivation blocks are merged, using a `gathered` math environment.
+            - Repair long repeated minus separators inside damaged math blocks to a single subtraction operator.
+            - Add permanent regression coverage from a long real ChatGPT response: Adam/RMSProp/Muon recurrences, boxed losses, z-loss, logsumexp, heading artifacts, and repeated operators.
+          files: |
+            main.js
+            manifest.json
+            styles.css
+            chatgpt-paste-formatter-0.1.7.zip
