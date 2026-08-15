@@ -1,0 +1,326 @@
+name: Apply and release 0.1.2 fixes
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Apply converter fixes and regression tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/converter.ts')
+          text = path.read_text()
+
+          text = text.replace(
+              "export type InlineMathMode = 'strict' | 'balanced' | 'aggressive';",
+              "import type { LanguagePreference } from './i18n';\n\nexport type InlineMathMode = 'strict' | 'balanced' | 'aggressive';",
+              1,
+          )
+
+          old = """export interface FormatterSettings {
+            autoPasteMode: AutoPasteMode;
+            inlineMathMode: InlineMathMode;
+            convertExplicitLatexDelimiters: boolean;
+            repairMalformedDisplayMath: boolean;
+            normalizeMathEscapes: boolean;
+            repairObviousBrokenRelations: boolean;
+            cleanEmptyEmphasis: boolean;
+            showNotices: boolean;
+          }"""
+          old = '\n'.join(line.strip() if i == 0 else line[10:] for i, line in enumerate(old.splitlines()))
+          new = """export interface FormatterSettings {
+  language: LanguagePreference;
+  autoPasteMode: AutoPasteMode;
+  inlineMathMode: InlineMathMode;
+  convertExplicitLatexDelimiters: boolean;
+  repairMalformedDisplayMath: boolean;
+  normalizeMathEscapes: boolean;
+  repairRepeatedEquals: boolean;
+  mergeAdjacentDisplayMath: boolean;
+  repairObviousBrokenRelations: boolean;
+  cleanEmptyEmphasis: boolean;
+  showAutoPasteNotices: boolean;
+}"""
+          if old not in text:
+              old = """export interface FormatterSettings {
+  autoPasteMode: AutoPasteMode;
+  inlineMathMode: InlineMathMode;
+  convertExplicitLatexDelimiters: boolean;
+  repairMalformedDisplayMath: boolean;
+  normalizeMathEscapes: boolean;
+  repairObviousBrokenRelations: boolean;
+  cleanEmptyEmphasis: boolean;
+  showNotices: boolean;
+}"""
+          if old not in text:
+              raise SystemExit('FormatterSettings block not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              """  normalizedMathEscapes: number;
+  cleanedArtifacts: number;""",
+              """  normalizedMathEscapes: number;
+  repairedRepeatedEquals: number;
+  mergedDisplayMath: number;
+  cleanedArtifacts: number;""",
+              1,
+          )
+
+          old_defaults = """export const DEFAULT_SETTINGS: FormatterSettings = {
+  autoPasteMode: 'detected',
+  inlineMathMode: 'balanced',
+  convertExplicitLatexDelimiters: true,
+  repairMalformedDisplayMath: true,
+  normalizeMathEscapes: true,
+  repairObviousBrokenRelations: true,
+  cleanEmptyEmphasis: false,
+  showNotices: true,
+};"""
+          new_defaults = """export const DEFAULT_SETTINGS: FormatterSettings = {
+  language: 'system',
+  autoPasteMode: 'detected',
+  inlineMathMode: 'balanced',
+  convertExplicitLatexDelimiters: true,
+  repairMalformedDisplayMath: true,
+  normalizeMathEscapes: true,
+  repairRepeatedEquals: true,
+  mergeAdjacentDisplayMath: true,
+  repairObviousBrokenRelations: true,
+  cleanEmptyEmphasis: false,
+  showAutoPasteNotices: false,
+};"""
+          if old_defaults not in text:
+              raise SystemExit('DEFAULT_SETTINGS block not found')
+          text = text.replace(old_defaults, new_defaults, 1)
+
+          text = text.replace(
+              """  normalizedMathEscapes: 0,
+  cleanedArtifacts: 0,""",
+              """  normalizedMathEscapes: 0,
+  repairedRepeatedEquals: 0,
+  mergedDisplayMath: 0,
+  cleanedArtifacts: 0,""",
+              1,
+          )
+
+          text = text.replace(
+              """  if (/\*\*\s+\*\*/.test(text)) score += 1;
+  return score;""",
+              """  if (/\\?={2,}/.test(text)) score += 2;
+  if (/\*\*\s+\*\*/.test(text)) score += 1;
+  return score;""",
+              1,
+          )
+
+          text = text.replace(
+              """  if (settings.repairMalformedDisplayMath || settings.convertExplicitLatexDelimiters) {
+    out = convertDisplayBlocks(out, settings, stats);
+  }
+
+  out = transformOutsideInlineCode(out, (chunk) => convertHeuristicInlineMath(chunk, settings, stats));""",
+              """  if (settings.repairMalformedDisplayMath || settings.convertExplicitLatexDelimiters) {
+    out = convertDisplayBlocks(out, settings, stats);
+  }
+
+  if (settings.mergeAdjacentDisplayMath) {
+    out = mergeAdjacentDisplayMathBlocks(out, stats);
+  }
+
+  out = transformOutsideInlineCode(out, (chunk) => convertHeuristicInlineMath(chunk, settings, stats));""",
+              1,
+          )
+
+          text = text.replace(
+              """  if (/^[\\s\\S]{0,120}$/.test(body) && /[A-Za-z][A-Za-z0-9_{}'\\\\]*\\([^\\n]*\\)/.test(body)) score += 1;
+
+  return score >= 2;""",
+              """  if (/^[\\s\\S]{0,120}$/.test(body) && /[A-Za-z][A-Za-z0-9_{}'\\\\]*\\([^\\n]*\\)/.test(body)) score += 1;
+  if (/^[A-Za-z][A-Za-z0-9_{}'\\\\]*(?:\\([^)]*\\))?\\s*[=<>]\\s*\\S[\\s\\S]*$/.test(body)) score += 1;
+
+  return score >= 2;""",
+              1,
+          )
+
+          old_normalize = """function normalizeMath(text: string, settings: FormatterSettings, stats: ConversionStats): string {
+  if (!settings.normalizeMathEscapes) return text;
+
+  return text.replace(/\\\\([_+=-])/g, (_match, char: string) => {
+    stats.normalizedMathEscapes += 1;
+    return char;
+  });
+}"""
+          new_normalize = """function normalizeMath(text: string, settings: FormatterSettings, stats: ConversionStats): string {
+  let out = text;
+
+  if (settings.repairRepeatedEquals) {
+    out = out.replace(/\\\\?={2,}/g, () => {
+      stats.repairedRepeatedEquals += 1;
+      return '=';
+    });
+  }
+
+  if (settings.normalizeMathEscapes) {
+    out = out.replace(/\\\\([_+=-])/g, (_match, char: string) => {
+      stats.normalizedMathEscapes += 1;
+      return char;
+    });
+  }
+
+  return out;
+}"""
+          if old_normalize not in text:
+              raise SystemExit('normalizeMath block not found')
+          text = text.replace(old_normalize, new_normalize, 1)
+
+          marker = """function transformOutsideInlineCode(text: string, transform: (chunk: string) => string): string {"""
+          helper = r"""function mergeAdjacentDisplayMathBlocks(text: string, stats: ConversionStats): string {
+  let out = text;
+  const adjacent = /\$\$\n([\s\S]*?)\n\$\$[ \t]*\n(?:[ \t]*\n)*\$\$\n([\s\S]*?)\n\$\$/g;
+
+  for (let pass = 0; pass < 20; pass += 1) {
+    let merged = false;
+    out = out.replace(adjacent, (match, firstBody: string, secondBody: string) => {
+      if (!looksLikeMathContinuation(secondBody) && !endsWithMathContinuation(firstBody)) return match;
+      merged = true;
+      stats.mergedDisplayMath += 1;
+      return `$$\n${firstBody.trimEnd()}\n${secondBody.trimStart()}\n$$`;
+    });
+    if (!merged) break;
+  }
+
+  return out;
+}
+
+function looksLikeMathContinuation(body: string): boolean {
+  const first = body.split('\n').map((line) => line.trim()).find((line) => line.length > 0) ?? '';
+  return /^(?:=|\\(?:approx|equiv|sim|simeq|leq|geq|to|Rightarrow|Longrightarrow)\b|[+\-*/])/.test(first);
+}
+
+function endsWithMathContinuation(body: string): boolean {
+  const lines = body.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  const last = lines[lines.length - 1] ?? '';
+  return /(?:=|\\(?:approx|equiv|sim|simeq|leq|geq|to)\b|[+\-*/])\s*$/.test(last);
+}
+
+"""
+          if marker not in text:
+              raise SystemExit('transformOutsideInlineCode marker not found')
+          text = text.replace(marker, helper + marker, 1)
+          path.write_text(text)
+
+          test_path = Path('scripts/test-converter.mjs')
+          tests = test_path.read_text()
+          tests = tests.replace(
+              "const { convertChatGPTToObsidian, detectChatGPTMathCopy } = await import(pathToFileURL(outfile));",
+              "const { convertChatGPTToObsidian, detectChatGPTMathCopy, DEFAULT_SETTINGS } = await import(pathToFileURL(outfile));",
+              1,
+          )
+
+          insertion = r'''
+  {
+    const input = `[\np\\_i\n\\===\n\n\\frac{e^{U\\_i}}\n{\\sum\\_j e^{U\\_j}}.\n]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$\np_i\n=\n\\frac{e^{U_i}}\n{\\sum_j e^{U_j}}.\n$$`);
+  }
+
+  {
+    const input = `[\n\\log p\\_i\n\\========\n\nU\\_i-\\log\\sum\\_j e^{U\\_j}\n]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$\n\\log p_i\n=\nU_i-\\log\\sum_j e^{U_j}\n$$`);
+  }
+
+  {
+    const input = `[\n\\=\\log(2.718+7.389+20.086)\n]\n\n[\n\\=\\log(30.193)\n\\approx3.4076.\n]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$\n=\\log(2.718+7.389+20.086)\n=\\log(30.193)\n\\approx3.4076.\n$$`);
+
+    const withoutMerge = convertChatGPTToObsidian(input, {
+      ...DEFAULT_SETTINGS,
+      mergeAdjacentDisplayMath: false,
+    }).output;
+    assert.equal((withoutMerge.match(/\$\$/g) ?? []).length, 4);
+  }
+
+  {
+    const input = `[\nU=[1,2,3]\n]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$\nU=[1,2,3]\n$$`);
+  }
+
+  {
+    const input = `[\np\\_i\n\\===\n\\frac{a}{b}\n]`;
+    const out = convertChatGPTToObsidian(input, {
+      ...DEFAULT_SETTINGS,
+      repairRepeatedEquals: false,
+    }).output;
+    assert.match(out, /p_i\n===\n/);
+  }
+
+'''
+          anchor = """  {
+    assert.ok(detectChatGPTMathCopy('# [ P(r\\\\mid x)\\n\\\\frac{a}{b}\\n]') >= 2);"""
+          if anchor not in tests:
+              raise SystemExit('test insertion anchor not found')
+          tests = tests.replace(anchor, insertion + anchor, 1)
+          tests = tests.replace(
+              "assert.equal(detectChatGPTMathCopy('普通的一段中文笔记。'), 0);",
+              "assert.ok(detectChatGPTMathCopy('\\\\========') >= 2);\n    assert.equal(detectChatGPTMathCopy('普通的一段中文笔记。'), 0);",
+              1,
+          )
+          test_path.write_text(tests)
+          PY
+
+      - run: npm ci
+
+      - name: Verify implementation
+        run: npm run check
+
+      - name: Bump to 0.1.2
+        run: npm version 0.1.2 --no-git-tag-version
+
+      - name: Build release candidate
+        run: npm run check
+
+      - name: Commit changes and tag
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ scripts/test-converter.mjs package.json package-lock.json manifest.json versions.json
+          git commit -m "feat: add configurable repair rules and organized settings"
+          git push origin HEAD:main
+          git tag 0.1.2
+          git push origin 0.1.2
+
+      - name: Create release package
+        run: zip chatgpt-paste-formatter-0.1.2.zip main.js manifest.json styles.css
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create 0.1.2 \
+            main.js manifest.json styles.css chatgpt-paste-formatter-0.1.2.zip \
+            --title '0.1.2' \
+            --notes 'Adds selectable interface language, grouped settings, repeated-equals repair, adjacent derivation merging, improved simple display-math recognition, and separate automatic conversion notifications.'
