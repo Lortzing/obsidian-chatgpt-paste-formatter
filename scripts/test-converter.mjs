@@ -18,7 +18,7 @@ try {
     outfile,
   });
 
-  const { convertChatGPTToObsidian, detectChatGPTMathCopy } = await import(pathToFileURL(outfile));
+  const { convertChatGPTToObsidian, detectChatGPTMathCopy, DEFAULT_SETTINGS } = await import(pathToFileURL(outfile));
 
   {
     const input = '行内 \\(x^2 + 1\\)，块级 \\[y = 2\\]';
@@ -53,8 +53,88 @@ try {
     assert.match(out, /正文 \$x\$/);
   }
 
+
+  {
+    const input = `[
+p\\_i
+\\===
+
+\\frac{e^{U\\_i}}
+{\\sum\\_j e^{U\\_j}}.
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+p_i
+=
+\\frac{e^{U_i}}
+{\\sum_j e^{U_j}}.
+$$`);
+  }
+
+  {
+    const input = `[
+\\log p\\_i
+\\========
+
+U\\_i-\\log\\sum\\_j e^{U\\_j}
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+\\log p_i
+=
+U_i-\\log\\sum_j e^{U_j}
+$$`);
+  }
+
+  {
+    const input = `[
+\\=\\log(2.718+7.389+20.086)
+]
+
+[
+\\=\\log(30.193)
+\\approx3.4076.
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+=\\log(2.718+7.389+20.086)
+=\\log(30.193)
+\\approx3.4076.
+$$`);
+
+    const withoutMerge = convertChatGPTToObsidian(input, {
+      ...DEFAULT_SETTINGS,
+      mergeAdjacentDisplayMath: false,
+    }).output;
+    assert.equal((withoutMerge.match(/\$\$/g) ?? []).length, 4);
+  }
+
+  {
+    const input = `[
+U=[1,2,3]
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.equal(out, `$$
+U=[1,2,3]
+$$`);
+  }
+
+  {
+    const input = `[
+p\\_i
+\\===
+\\frac{a}{b}
+]`;
+    const out = convertChatGPTToObsidian(input, {
+      ...DEFAULT_SETTINGS,
+      repairRepeatedEquals: false,
+    }).output;
+    assert.match(out, /p_i\n===\n/);
+  }
+
   {
     assert.ok(detectChatGPTMathCopy('# [ P(r\\mid x)\n\\frac{a}{b}\n]') >= 2);
+    assert.ok(detectChatGPTMathCopy('\\========') >= 2);
     assert.equal(detectChatGPTMathCopy('普通的一段中文笔记。'), 0);
   }
 

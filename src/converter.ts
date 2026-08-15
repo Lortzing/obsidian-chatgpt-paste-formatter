@@ -1,15 +1,20 @@
+import type { LanguagePreference } from './i18n';
+
 export type InlineMathMode = 'strict' | 'balanced' | 'aggressive';
 export type AutoPasteMode = 'off' | 'detected' | 'always';
 
 export interface FormatterSettings {
+  language: LanguagePreference;
   autoPasteMode: AutoPasteMode;
   inlineMathMode: InlineMathMode;
   convertExplicitLatexDelimiters: boolean;
   repairMalformedDisplayMath: boolean;
   normalizeMathEscapes: boolean;
+  repairRepeatedEquals: boolean;
+  mergeAdjacentDisplayMath: boolean;
   repairObviousBrokenRelations: boolean;
   cleanEmptyEmphasis: boolean;
-  showNotices: boolean;
+  showAutoPasteNotices: boolean;
 }
 
 export interface ConversionStats {
@@ -18,6 +23,8 @@ export interface ConversionStats {
   malformedDisplayMath: number;
   heuristicInlineMath: number;
   normalizedMathEscapes: number;
+  repairedRepeatedEquals: number;
+  mergedDisplayMath: number;
   cleanedArtifacts: number;
 }
 
@@ -29,14 +36,17 @@ export interface ConversionResult {
 }
 
 export const DEFAULT_SETTINGS: FormatterSettings = {
+  language: 'system',
   autoPasteMode: 'detected',
   inlineMathMode: 'balanced',
   convertExplicitLatexDelimiters: true,
   repairMalformedDisplayMath: true,
   normalizeMathEscapes: true,
+  repairRepeatedEquals: true,
+  mergeAdjacentDisplayMath: true,
   repairObviousBrokenRelations: true,
   cleanEmptyEmphasis: false,
-  showNotices: true,
+  showAutoPasteNotices: false,
 };
 
 const EMPTY_STATS = (): ConversionStats => ({
@@ -45,6 +55,8 @@ const EMPTY_STATS = (): ConversionStats => ({
   malformedDisplayMath: 0,
   heuristicInlineMath: 0,
   normalizedMathEscapes: 0,
+  repairedRepeatedEquals: 0,
+  mergedDisplayMath: 0,
   cleanedArtifacts: 0,
 });
 
@@ -78,6 +90,7 @@ export function detectChatGPTMathCopy(text: string): number {
   if (latexTokens >= 3) score += 2;
   else if (latexTokens > 0) score += 1;
 
+  if (/\\?={2,}/.test(text)) score += 2;
   if (/\*\*\s+\*\*/.test(text)) score += 1;
   return score;
 }
@@ -119,6 +132,10 @@ function processText(text: string, settings: FormatterSettings, stats: Conversio
 
   if (settings.repairMalformedDisplayMath || settings.convertExplicitLatexDelimiters) {
     out = convertDisplayBlocks(out, settings, stats);
+  }
+
+  if (settings.mergeAdjacentDisplayMath) {
+    out = mergeAdjacentDisplayMathBlocks(out, stats);
   }
 
   out = transformOutsideInlineCode(out, (chunk) => convertHeuristicInlineMath(chunk, settings, stats));
@@ -295,6 +312,7 @@ function looksLikeDisplayMath(lines: string[]): boolean {
   if (/[=<>]/.test(body)) score += 1;
   if (/\\(?:frac|sum|int|boxed|operatorname|begin|end|log|sqrt)\b/.test(body)) score += 2;
   if (/^[\s\S]{0,120}$/.test(body) && /[A-Za-z][A-Za-z0-9_{}'\\]*\([^\n]*\)/.test(body)) score += 1;
+  if (/^[A-Za-z][A-Za-z0-9_{}'\\]*(?:\([^)]*\))?\s*[=<>]\s*\S[\s\S]*$/.test(body)) score += 1;
 
   return score >= 2;
 }
@@ -358,12 +376,52 @@ function isLikelyRightHandSide(line: string): boolean {
 }
 
 function normalizeMath(text: string, settings: FormatterSettings, stats: ConversionStats): string {
-  if (!settings.normalizeMathEscapes) return text;
+  let out = text;
 
-  return text.replace(/\\([_+=-])/g, (_match, char: string) => {
-    stats.normalizedMathEscapes += 1;
-    return char;
-  });
+  if (settings.repairRepeatedEquals) {
+    out = out.replace(/\\?={2,}/g, () => {
+      stats.repairedRepeatedEquals += 1;
+      return '=';
+    });
+  }
+
+  if (settings.normalizeMathEscapes) {
+    out = out.replace(/\\([_+=-])/g, (_match, char: string) => {
+      stats.normalizedMathEscapes += 1;
+      return char;
+    });
+  }
+
+  return out;
+}
+
+function mergeAdjacentDisplayMathBlocks(text: string, stats: ConversionStats): string {
+  let out = text;
+  const adjacent = /\$\$\n([\s\S]*?)\n\$\$[ \t]*\n(?:[ \t]*\n)*\$\$\n([\s\S]*?)\n\$\$/g;
+
+  for (let pass = 0; pass < 20; pass += 1) {
+    let merged = false;
+    out = out.replace(adjacent, (match, firstBody: string, secondBody: string) => {
+      if (!looksLikeMathContinuation(secondBody) && !endsWithMathContinuation(firstBody)) return match;
+      merged = true;
+      stats.mergedDisplayMath += 1;
+      return `$$\n${firstBody.trimEnd()}\n${secondBody.trimStart()}\n$$`;
+    });
+    if (!merged) break;
+  }
+
+  return out;
+}
+
+function looksLikeMathContinuation(body: string): boolean {
+  const first = body.split('\n').map((line) => line.trim()).find((line) => line.length > 0) ?? '';
+  return /^(?:=|\\(?:approx|equiv|sim|simeq|leq|geq|to|Rightarrow|Longrightarrow)\b|[+\-*/])/.test(first);
+}
+
+function endsWithMathContinuation(body: string): boolean {
+  const lines = body.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  const last = lines[lines.length - 1] ?? '';
+  return /(?:=|\\(?:approx|equiv|sim|simeq|leq|geq|to)\b|[+\-*/])\s*$/.test(last);
 }
 
 function transformOutsideInlineCode(text: string, transform: (chunk: string) => string): string {
