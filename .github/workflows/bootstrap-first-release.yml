@@ -22,6 +22,40 @@ jobs:
         with:
           node-version: 22
 
+      - name: Apply lint-guided source fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          eslint = Path('eslint.config.mts')
+          text = eslint.read_text()
+          text = text.replace(
+              "allowDefaultProject: ['eslint.config.mts', 'manifest.json']",
+              "allowDefaultProject: ['eslint.config.mts', 'manifest.json', 'scripts/test-converter.mjs']",
+          )
+          eslint.write_text(text)
+
+          converter = Path('src/converter.ts')
+          text = converter.read_text()
+          text = text.replace(r'/[A-Za-z0-9({\[]/', r'/[A-Za-z0-9({[]/')
+          converter.write_text(text)
+
+          main = Path('src/main.ts')
+          text = main.read_text()
+          text = text.replace(
+              "new Notice('Clipboard access failed. Paste normally, select the text, then run “Convert selection or note”.');",
+              "new Notice('Clipboard access failed. Paste normally, select the text, then run the conversion command.');",
+          )
+          text = text.replace(
+              "this.app.workspace.on('editor-paste', (event, editor) => {\n        if (this.settings.autoPasteMode === 'off') return;",
+              "this.app.workspace.on('editor-paste', (event, editor) => {\n        if (event.defaultPrevented) return;\n        if (this.settings.autoPasteMode === 'off') return;",
+          )
+          text = text.replace(".setTitle('Convert ChatGPT text')", ".setTitle('Convert copied text')")
+          text = text.replace(".setTitle('Preview ChatGPT conversion')", ".setTitle('Preview conversion')")
+          main.write_text(text)
+          PY
+
       - name: Install dependencies and generate lockfile
         run: npm install
 
@@ -39,14 +73,14 @@ jobs:
           fi
           rm -f assets/preview.png.b64 assets/demo.gif.b64 assets/.gitkeep
 
-      - name: Commit generated lockfile and binary assets
+      - name: Commit generated and lint-guided changes
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A package-lock.json assets/
+          git add -A package-lock.json assets/ src/ eslint.config.mts
           if ! git diff --cached --quiet; then
-            git commit -m "chore: add lockfile and README assets"
+            git commit -m "chore: finalize release tooling and assets"
             git push origin HEAD:main
           fi
 
