@@ -1,0 +1,29 @@
+{
+  "name": "chatgpt-paste-formatter",
+  "version": "0.1.0",
+  "description": "Obsidian community plugin source for repairing ChatGPT Markdown and math when pasted into notes.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "test": "node scripts/test-converter.mjs",
+    "check": "npm run test && npm run build",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "chatgpt",
+    "markdown",
+    "latex",
+    "mathjax",
+    "clipboard"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "esbuild": "0.25.5",
+    "obsidian": "latest",
+    "typescript": "^5.8.3"
+  }
+}

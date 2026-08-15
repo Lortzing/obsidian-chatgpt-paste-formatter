@@ -1,0 +1,10 @@
+{
+  "id": "chatgpt-paste-formatter",
+  "name": "ChatGPT Paste Formatter",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Converts text copied from ChatGPT into Obsidian-friendly Markdown and MathJax, including damaged math clipboard formats.",
+  "author": "Lortzing",
+  "authorUrl": "https://github.com/Lortzing",
+  "isDesktopOnly": false
+}

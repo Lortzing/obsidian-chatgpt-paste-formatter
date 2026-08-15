@@ -1,0 +1,33 @@
+name: Release plugin
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run check
+      - name: Create release package
+        run: |
+          mkdir release
+          cp main.js manifest.json styles.css release/
+          cd release && zip ../chatgpt-paste-formatter-${GITHUB_REF_NAME}.zip main.js manifest.json styles.css
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            main.js
+            manifest.json
+            styles.css
+            chatgpt-paste-formatter-${{ github.ref_name }}.zip

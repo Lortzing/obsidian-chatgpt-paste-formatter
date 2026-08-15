@@ -1,0 +1,12 @@
+node_modules/
+main.js
+*.map
+.DS_Store
+npm-debug.log*
+.tmp-test/
+.standalone*
+.obsidian-shim.d.ts
+dist/
+release/
+
+*.zip
