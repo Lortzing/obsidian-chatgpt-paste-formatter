@@ -15,17 +15,8 @@ const LOCALIZED_COMMAND_IDS = [
   'preview-selection-or-note',
 ] as const;
 
-interface PluginSettings extends FormatterSettings {
-  showSelectionInSidebar: boolean;
-}
-
-const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
-  ...DEFAULT_SETTINGS,
-  showSelectionInSidebar: true,
-};
-
 export default class ChatGPTPasteFormatterPlugin extends Plugin {
-  settings: PluginSettings = { ...DEFAULT_PLUGIN_SETTINGS };
+  settings: FormatterSettings = { ...DEFAULT_SETTINGS };
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -79,9 +70,9 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const saved: unknown = await this.loadData();
     const stored = saved !== null && typeof saved === 'object'
-      ? saved as Partial<PluginSettings>
+      ? saved as Partial<FormatterSettings>
       : {};
-    this.settings = { ...DEFAULT_PLUGIN_SETTINGS, ...stored };
+    this.settings = { ...DEFAULT_SETTINGS, ...stored };
     setLanguagePreference(this.settings.language);
   }
 
@@ -160,7 +151,6 @@ export default class ChatGPTPasteFormatterPlugin extends Plugin {
   }
 
   private syncSidebarSelection(): void {
-    if (!this.settings.showSelectionInSidebar) return;
     this.getConverterView()?.captureActiveSelection();
   }
 }
