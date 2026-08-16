@@ -15,7 +15,9 @@ export function convertChatGPTToObsidian(
   settings: FormatterSettings = DEFAULT_SETTINGS,
 ): ConversionResult {
   const normalizedInput = input.replace(/\r\n?/g, '\n').replace(/\u200B/g, '');
-  const recoveredInput = recoverBareDisplayMath(normalizedInput);
+  const recoveredInput = settings.repairMalformedDisplayMath
+    ? recoverBareDisplayMath(normalizedInput)
+    : normalizedInput;
   const result = convertCore(recoveredInput, settings);
   return { ...result, changed: result.output !== normalizedInput };
 }

@@ -441,22 +441,76 @@ function normalizeMath(text: string, settings: FormatterSettings, stats: Convers
   return out;
 }
 
-function mergeAdjacentDisplayMathBlocks(text: string, stats: ConversionStats): string {
-  let out = text;
-  const adjacent = /\$\$\n([\s\S]*?)\n\$\$[ \t]*\n(?:[ \t]*\n)*\$\$\n([\s\S]*?)\n\$\$/g;
+interface RenderedDisplayMathBlock {
+  end: number;
+  body: string;
+  punctuation: string;
+}
 
-  for (let pass = 0; pass < 20; pass += 1) {
-    let merged = false;
-    out = out.replace(adjacent, (match, firstBody: string, secondBody: string) => {
-      if (!looksLikeMathContinuation(secondBody) && !endsWithMathContinuation(firstBody)) return match;
-      merged = true;
-      stats.mergedDisplayMath += 1;
-      return `$$\n${mergeDisplayBodiesWithLineBreak(firstBody, secondBody)}\n$$`;
-    });
-    if (!merged) break;
+function readRenderedDisplayMathBlock(lines: string[], start: number): RenderedDisplayMathBlock | null {
+  if (lines[start]?.trim() !== '$$') return null;
+
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const close = lines[i].match(/^\s*\$\$([.,;:!?，。；：！？]?)\s*$/);
+    if (!close) continue;
+    return {
+      end: i,
+      body: lines.slice(start + 1, i).join('\n'),
+      punctuation: close[1] ?? '',
+    };
   }
 
-  return out;
+  return null;
+}
+
+function mergeAdjacentDisplayMathBlocks(text: string, stats: ConversionStats): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const first = readRenderedDisplayMathBlock(lines, i);
+    if (!first) {
+      out.push(lines[i]);
+      i += 1;
+      continue;
+    }
+
+    let mergedBody = first.body;
+    let lastBody = first.body;
+    let punctuation = first.punctuation;
+    let end = first.end;
+    let merged = false;
+
+    while (!punctuation) {
+      let nextStart = end + 1;
+      while (nextStart < lines.length && lines[nextStart].trim() === '') nextStart += 1;
+
+      const next = readRenderedDisplayMathBlock(lines, nextStart);
+      if (!next) break;
+      if (!looksLikeMathContinuation(next.body) && !endsWithMathContinuation(lastBody)) break;
+
+      mergedBody = mergeDisplayBodiesWithLineBreak(mergedBody, next.body);
+      lastBody = next.body;
+      punctuation = next.punctuation;
+      end = next.end;
+      merged = true;
+      stats.mergedDisplayMath += 1;
+    }
+
+    if (merged) {
+      out.push('$$');
+      out.push(...mergedBody.split('\n'));
+      out.push(`$$${punctuation}`);
+      i = end + 1;
+      continue;
+    }
+
+    out.push(...lines.slice(i, first.end + 1));
+    i = first.end + 1;
+  }
+
+  return out.join('\n');
 }
 
 function mergeDisplayBodiesWithLineBreak(firstBody: string, secondBody: string): string {
@@ -531,9 +585,24 @@ function convertPlainParens(
   let depth = 0;
   let start = -1;
   let inInlineMath = false;
+  let explicitDelimiterClose: ')' | ']' | null = null;
 
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
+
+    if (explicitDelimiterClose) {
+      if (ch === '\\' && text[i + 1] === explicitDelimiterClose) {
+        explicitDelimiterClose = null;
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '\\' && (text[i + 1] === '(' || text[i + 1] === '[')) {
+      explicitDelimiterClose = text[i + 1] === '(' ? ')' : ']';
+      i += 1;
+      continue;
+    }
 
     if (ch === '$' && text[i - 1] !== '\\') {
       if (text[i + 1] === '$') {

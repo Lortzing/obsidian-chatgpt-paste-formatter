@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -493,6 +493,150 @@ $$`,
         fixture.name,
       );
     }
+  }
+
+
+  // Adjacent display merging must never search across ordinary prose for a later pair of $$ delimiters.
+  {
+    const input = String.raw`[
+a=1
+]
+
+ordinary prose between formulas
+
+[
+=2
+]
+
+[
+=3
+]`;
+    const out = convertChatGPTToObsidian(input).output;
+    assert.match(out, /^\$\$\na=1\n\$\$/);
+    assert.ok(out.includes('$$\n\nordinary prose between formulas\n\n$$'));
+    assert.equal((out.match(/\\begin\{gathered\}/g) ?? []).length, 1);
+    const gatheredStart = out.indexOf('\\begin{gathered}');
+    const gatheredEnd = out.indexOf('\\end{gathered}', gatheredStart);
+    const gathered = out.slice(gatheredStart, gatheredEnd + '\\end{gathered}'.length);
+    assert.equal(gathered, String.raw`\begin{gathered}
+=2
+\\
+=3
+\end{gathered}`);
+    assert.ok(!gathered.includes('ordinary prose'));
+  }
+
+  // Settings should be behaviorally meaningful, not just UI toggles.
+  {
+    const malformed = '[\nx+1\n]';
+    assert.equal(
+      convertChatGPTToObsidian(malformed, { ...DEFAULT_SETTINGS, repairMalformedDisplayMath: false }).output,
+      malformed,
+    );
+
+    const explicit = String.raw`keep \(x+1\) here
+\[
+y=2
+\]`;
+    assert.equal(
+      convertChatGPTToObsidian(explicit, { ...DEFAULT_SETTINGS, convertExplicitLatexDelimiters: false }).output,
+      explicit,
+    );
+
+    const escaped = String.raw`[
+x\_1\+y
+]`;
+    assert.equal(
+      convertChatGPTToObsidian(escaped, { ...DEFAULT_SETTINGS, normalizeMathEscapes: false }).output,
+      String.raw`$$
+x\_1\+y
+$$`,
+    );
+
+    const relation = String.raw`# [ P(r\mid x)
+
+\frac{e^x}{Z}
+]`;
+    assert.equal(
+      convertChatGPTToObsidian(relation, { ...DEFAULT_SETTINGS, repairObviousBrokenRelations: false }).output,
+      String.raw`$$
+P(r\mid x)
+\frac{e^x}{Z}
+$$`,
+    );
+
+    assert.equal(
+      convertChatGPTToObsidian('a ** ** b', { ...DEFAULT_SETTINGS, cleanEmptyEmphasis: false }).output,
+      'a ** ** b',
+    );
+    assert.equal(
+      convertChatGPTToObsidian('a ** ** b', { ...DEFAULT_SETTINGS, cleanEmptyEmphasis: true }).output,
+      'a   b',
+    );
+  }
+
+  // Inline-math modes have distinct precision/recall behavior.
+  {
+    const strict = convertChatGPTToObsidian('变量 (x)，表达式 (x^2)。', {
+      ...DEFAULT_SETTINGS,
+      inlineMathMode: 'strict',
+    }).output;
+    assert.equal(strict, '变量 (x)，表达式 $x^2$。');
+
+    const balanced = convertChatGPTToObsidian('变量 (x)。', {
+      ...DEFAULT_SETTINGS,
+      inlineMathMode: 'balanced',
+    }).output;
+    assert.equal(balanced, '变量 $x$。');
+
+    const balancedEnglish = convertChatGPTToObsidian('value (x) here', {
+      ...DEFAULT_SETTINGS,
+      inlineMathMode: 'balanced',
+    }).output;
+    assert.equal(balancedEnglish, 'value (x) here');
+
+    const aggressive = convertChatGPTToObsidian('value (x) here', {
+      ...DEFAULT_SETTINGS,
+      inlineMathMode: 'aggressive',
+    }).output;
+    assert.equal(aggressive, 'value $x$ here');
+  }
+
+  // Full-document regression copied from a real long ChatGPT response.
+  {
+    const input = await readFile('tests/fixtures/rmsprop-logsumexp-long.md', 'utf8');
+    const out = convertChatGPTToObsidian(input).output;
+
+    assert.ok(out.includes(String.raw`你这里本质上是 RMSProp：
+
+$$
+S_W=\beta S_W+(1-\beta)g_W^2
+$$
+
+然后
+
+$$
+W_{t+1}
+=
+W_t-r\frac{g_W}{\sqrt{S_W+\epsilon}}
+$$`));
+
+    const gatheredStarts = [...out.matchAll(/\\begin\{gathered\}/g)].map((match) => match.index ?? -1);
+    assert.equal(gatheredStarts.length, 1, 'Only the genuinely adjacent logsumexp continuation should use gathered');
+    const gatheredStart = gatheredStarts[0];
+    const gatheredEnd = out.indexOf('\\end{gathered}', gatheredStart);
+    assert.ok(gatheredEnd > gatheredStart);
+    const gathered = out.slice(gatheredStart, gatheredEnd + '\\end{gathered}'.length);
+    assert.equal(gathered, String.raw`\begin{gathered}
+=\log(2.718+7.389+20.086)
+\\
+=\log(30.193)
+\approx3.4076.
+\end{gathered}`);
+    assert.ok(out.indexOf('数值大约：') < gatheredStart);
+    assert.ok(out.indexOf('然后') < gatheredStart);
+    assert.ok(!gathered.includes('RMSProp'));
+    assert.ok(!gathered.includes('然后'));
   }
 
   console.log('All converter tests passed.');
