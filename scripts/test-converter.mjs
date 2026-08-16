@@ -602,6 +602,87 @@ $$`,
     assert.equal(aggressive, 'value $x$ here');
   }
 
+  // Recover ChatGPT-damaged row separators inside LaTeX row environments only.
+  {
+    const slash = '\\';
+    const matrixInput = [
+      '[',
+      '\\Delta W=-M',
+      '===========',
+      '',
+      '-U',
+      '\\begin{bmatrix}',
+      `\\sigma_1&&${slash}`,
+      `&\\sigma_2&${slash}`,
+      '&&\\ddots',
+      '\\end{bmatrix}',
+      'V^\\top.',
+      ']',
+    ].join('\n');
+    assert.equal(
+      convertChatGPTToObsidian(matrixInput).output,
+      String.raw`$$
+\Delta W=-M
+=
+-U
+\begin{bmatrix}
+\sigma_1&&\\
+&\sigma_2&\\
+&&\ddots
+\end{bmatrix}
+V^\top.
+$$`,
+      'single trailing backslashes in bmatrix rows should become TeX row breaks',
+    );
+
+    const casesInput = [
+      '[',
+      'f(x)=',
+      '\\begin{cases}',
+      `x^2, & x<0,${slash}`,
+      `2x+1, & 0\\le x<2,${slash}`,
+      '5, & x\\ge 2.',
+      '\\end{cases}',
+      ']',
+    ].join('\n');
+    assert.equal(
+      convertChatGPTToObsidian(casesInput).output,
+      String.raw`$$
+f(x)=
+\begin{cases}
+x^2, & x<0,\\
+2x+1, & 0\le x<2,\\
+5, & x\ge 2.
+\end{cases}
+$$`,
+      'single trailing backslashes in cases rows should become TeX row breaks',
+    );
+
+    const alreadyCorrect = String.raw`[
+\begin{aligned}
+x&=1\\
+y&=2
+\end{aligned}
+]`;
+    assert.equal(
+      convertChatGPTToObsidian(alreadyCorrect).output,
+      String.raw`$$
+\begin{aligned}
+x&=1\\
+y&=2
+\end{aligned}
+$$`,
+      'existing double-backslash row breaks must remain exactly double',
+    );
+
+    const outsideEnvironment = ['[', `x+1${slash}`, 'y+2', ']'].join('\n');
+    assert.equal(
+      convertChatGPTToObsidian(outsideEnvironment).output,
+      ['$$', `x+1${slash}`, 'y+2', '$$'].join('\n'),
+      'a lone trailing backslash outside a row environment must not be rewritten',
+    );
+  }
+
   // Full-document regression copied from a real long ChatGPT response.
   {
     const input = await readFile('tests/fixtures/rmsprop-logsumexp-long.md', 'utf8');

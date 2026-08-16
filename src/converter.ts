@@ -399,7 +399,66 @@ function cleanDisplayBody(
   // A heading marker inside a copied math block often denotes another visual line.
   // Keep the line, but do not invent relation operators beyond the obvious first LHS/RHS case.
   void hadHeading;
-  return cleaned.length > 0 ? cleaned : [''];
+  const repairedRows = repairBrokenEnvironmentRowBreaks(cleaned, stats);
+  return repairedRows.length > 0 ? repairedRows : [''];
+}
+
+const ROW_BREAK_ENVIRONMENTS = new Set([
+  'matrix',
+  'matrix*',
+  'smallmatrix',
+  'pmatrix',
+  'bmatrix',
+  'Bmatrix',
+  'vmatrix',
+  'Vmatrix',
+  'cases',
+  'dcases',
+  'rcases',
+  'aligned',
+  'alignedat',
+  'gathered',
+  'array',
+  'split',
+]);
+
+function repairBrokenEnvironmentRowBreaks(lines: string[], stats: ConversionStats): string[] {
+  const environmentStack: string[] = [];
+  const repaired: string[] = [];
+
+  for (const sourceLine of lines) {
+    const activeBefore = environmentStack.some((environment) => ROW_BREAK_ENVIRONMENTS.has(environment));
+    const beginOnLine = [...sourceLine.matchAll(/\\begin\{([^{}]+)\}/g)]
+      .some((match) => ROW_BREAK_ENVIRONMENTS.has(match[1]));
+    const insideRowEnvironment = activeBefore || beginOnLine;
+    const closesRowEnvironment = [...sourceLine.matchAll(/\\end\{([^{}]+)\}/g)]
+      .some((match) => ROW_BREAK_ENVIRONMENTS.has(match[1]));
+
+    let line = sourceLine;
+    if (insideRowEnvironment && !closesRowEnvironment) {
+      const trailingBackslashes = line.match(/(\\+)$/)?.[1].length ?? 0;
+      if (trailingBackslashes === 1) {
+        line += '\\';
+        stats.cleanedArtifacts += 1;
+      }
+    }
+    repaired.push(line);
+
+    const events = sourceLine.matchAll(/\\(begin|end)\{([^{}]+)\}/g);
+    for (const event of events) {
+      const kind = event[1];
+      const environment = event[2];
+      if (kind === 'begin') {
+        environmentStack.push(environment);
+        continue;
+      }
+
+      const index = environmentStack.lastIndexOf(environment);
+      if (index >= 0) environmentStack.splice(index, 1);
+    }
+  }
+
+  return repaired;
 }
 
 function isLikelyLeftHandSide(line: string): boolean {
